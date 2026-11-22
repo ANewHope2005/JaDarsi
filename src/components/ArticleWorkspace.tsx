@@ -21,6 +21,7 @@ import {
   Highlighter,
   Trash2,
   RotateCcw,
+  FileUp,
 } from 'lucide-react';
 import {
   ArticleCallout,
@@ -73,6 +74,7 @@ interface ArticleWorkspaceProps {
   onRestoreHighlight: (highlight: TextHighlight) => void;
   onUpdateHighlightColor: (highlightId: string, color: HighlightColor) => void;
   onClearLessonHighlights: () => void;
+  onOpenImportModal?: () => void;
 }
 
 const CALLOUT_STYLES: Record<
@@ -335,6 +337,7 @@ export const ArticleWorkspace: React.FC<ArticleWorkspaceProps> = ({
   onRestoreHighlight,
   onUpdateHighlightColor,
   onClearLessonHighlights,
+  onOpenImportModal,
 }) => {
   const [activeSectionId, setActiveSectionId] = useState<string>(activeLesson.sections[0]?.id ?? '');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -868,15 +871,27 @@ export const ArticleWorkspace: React.FC<ArticleWorkspaceProps> = ({
                       هنوز جزوه درسی (.md) برای این فصل ثبت نشده است
                     </p>
                     <p className="mt-1.5 text-xs leading-6 text-[#64748B] dark:text-[#94A3B8]">
-                      می‌توانید از بخش مدیریت منابع، فایل جزوه Markdown را برای این درس بارگذاری کنید.
+                      فایل Markdown جزوه را مستقیماً بارگذاری کنید یا از بخش مدیریت منابع آن را اضافه نمایید.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => onChangeMode('resources')}
-                      className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#0D9488] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E]"
-                    >
-                      <span>افزودن جزوه در مدیریت منابع</span>
-                    </button>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                      {onOpenImportModal && (
+                        <button
+                          type="button"
+                          onClick={onOpenImportModal}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#0D9488] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E]"
+                        >
+                          <FileUp className="h-3.5 w-3.5" />
+                          <span>ورود فایل جزوه (.md)</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onChangeMode('resources')}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-xs font-medium text-[#334155] transition-colors hover:border-[#0D9488] hover:text-[#0D9488] dark:border-[#364554] dark:bg-[#1C252E] dark:text-[#E2E8F0] dark:hover:border-[#2DD4BF]"
+                      >
+                        <span>مدیریت منابع</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 

@@ -55,7 +55,7 @@ export interface ReplaceResourcePayload {
 
 interface ResourceManagerWorkspaceProps {
   lessons: Lesson[];
-  activeLessonId: string;
+  activeLessonId: string | null;
   customCardsByLesson: Record<string, Flashcard[]>;
   onSelectLesson: (lessonId: string) => void;
   onOpenLessonInMode: (lessonId: string, mode: WorkspaceMode) => void;
@@ -113,7 +113,7 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
   onMoveResource,
   onDeleteResource,
 }) => {
-  const [selectedId, setSelectedId] = useState<string>(activeLessonId);
+  const [selectedId, setSelectedId] = useState<string>(activeLessonId ?? '');
   const [lessonSearch, setLessonSearch] = useState('');
 
   // Create lesson form
@@ -261,11 +261,6 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
 
   const handleConfirmDeleteLesson = () => {
     if (!confirmDeleteLesson) return;
-    if (lessons.length <= 1) {
-      setConfirmDeleteLesson(null);
-      showNotice('error', 'حداقل یک درس باید در جادرسی باقی بماند. ابتدا درس جدیدی ایجاد کنید.');
-      return;
-    }
     const deletedTitle = confirmDeleteLesson.title;
     onDeleteLesson(confirmDeleteLesson.id);
     setConfirmDeleteLesson(null);
@@ -381,15 +376,17 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
     showNotice('success', `${kindNames[kind]} از درس «${selectedLesson.title}» حذف شد.`);
   };
 
-  if (!selectedLesson) return null;
-
-  const selectedCustomCards = customCardsByLesson[selectedLesson.id] ?? [];
-  const totalLessonFlashcards = selectedLesson.flashcards.length + selectedCustomCards.length;
-  const hasLecture = selectedLesson.sections.length > 0;
-  const hasMindmap = !isMindmapEmpty(selectedLesson.mindmap);
+  const selectedCustomCards = selectedLesson ? customCardsByLesson[selectedLesson.id] ?? [] : [];
+  const totalLessonFlashcards = selectedLesson
+    ? selectedLesson.flashcards.length + selectedCustomCards.length
+    : 0;
+  const hasLecture = selectedLesson ? selectedLesson.sections.length > 0 : false;
+  const hasMindmap = selectedLesson ? !isMindmapEmpty(selectedLesson.mindmap) : false;
   const hasFlashcards = totalLessonFlashcards > 0;
-  const hasQuiz = selectedLesson.quiz.length > 0;
-  const multiQuizCount = selectedLesson.quiz.filter((q) => q.type === 'multi').length;
+  const hasQuiz = selectedLesson ? selectedLesson.quiz.length > 0 : false;
+  const multiQuizCount = selectedLesson
+    ? selectedLesson.quiz.filter((q) => q.type === 'multi').length
+    : 0;
 
   const resourceItems: {
     kind: ResourceKind;
@@ -404,75 +401,77 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
     displayName: string;
     metaText: string;
     supportsAppendOnMove: boolean;
-  }[] = [
-    {
-      kind: 'lecture',
-      title: 'جزوه درسی',
-      format: '.md',
-      accept: '.md,.markdown,.txt',
-      modeTarget: 'notes',
-      modeLabel: 'مشاهده در جزوه',
-      icon: BookOpen,
-      inputRef: lectureInputRef,
-      present: hasLecture,
-      displayName: selectedLesson.resourceLabels?.lecture || `جزوه ${selectedLesson.title}`,
-      metaText: hasLecture
-        ? `${selectedLesson.sections.length} بخش · ${selectedLesson.readingMinutes} دقیقه مطالعه`
-        : 'فایل جزوه ثبت نشده است',
-      supportsAppendOnMove: false,
-    },
-    {
-      kind: 'mindmap',
-      title: 'درخت دانش / مایندمپ',
-      format: '.json',
-      accept: '.json',
-      modeTarget: 'mindmap',
-      modeLabel: 'مشاهده در مایندمپ',
-      icon: Network,
-      inputRef: mindmapInputRef,
-      present: hasMindmap,
-      displayName:
-        selectedLesson.resourceLabels?.mindmap ||
-        (hasMindmap ? selectedLesson.mindmap.title : `درخت دانش ${selectedLesson.title}`),
-      metaText: hasMindmap
-        ? `${countTreeNodes(selectedLesson.mindmap)} گره مفهومی`
-        : 'فایل درخت دانش ثبت نشده است',
-      supportsAppendOnMove: false,
-    },
-    {
-      kind: 'flashcards',
-      title: 'فلش‌کارت‌های مرور',
-      format: '.csv',
-      accept: '.csv',
-      modeTarget: 'flashcards',
-      modeLabel: 'مرور فلش‌کارت‌ها',
-      icon: Layers,
-      inputRef: flashcardsInputRef,
-      present: hasFlashcards,
-      displayName:
-        selectedLesson.resourceLabels?.flashcards || `مجموعه فلش‌کارت ${selectedLesson.title}`,
-      metaText: hasFlashcards
-        ? `${totalLessonFlashcards} کارت${selectedCustomCards.length > 0 ? ` (${selectedCustomCards.length} کارت شخصی)` : ''}`
-        : 'فایل فلش‌کارت ثبت نشده است',
-      supportsAppendOnMove: true,
-    },
-    {
-      kind: 'quiz',
-      title: 'آزمون تستی',
-      format: '.json',
-      accept: '.json',
-      modeTarget: 'quiz',
-      modeLabel: 'شروع آزمون',
-      icon: CheckSquare,
-      inputRef: quizInputRef,
-      present: hasQuiz,
-      displayName: selectedLesson.resourceLabels?.quiz || `آزمون ${selectedLesson.title}`,
-      metaText: hasQuiz
-        ? `${selectedLesson.quiz.length} سوال${multiQuizCount > 0 ? ` · ${multiQuizCount} چندگزینه‌ای` : ''}`
-        : 'فایل آزمون ثبت نشده است',
-      supportsAppendOnMove: true,
-    },
-  ];
+  }[] = selectedLesson
+    ? [
+        {
+          kind: 'lecture',
+          title: 'جزوه درسی',
+          format: '.md',
+          accept: '.md,.markdown,.txt',
+          modeTarget: 'notes',
+          modeLabel: 'مشاهده در جزوه',
+          icon: BookOpen,
+          inputRef: lectureInputRef,
+          present: hasLecture,
+          displayName: selectedLesson.resourceLabels?.lecture || `جزوه ${selectedLesson.title}`,
+          metaText: hasLecture
+            ? `${selectedLesson.sections.length} بخش · ${selectedLesson.readingMinutes} دقیقه مطالعه`
+            : 'فایل جزوه ثبت نشده است',
+          supportsAppendOnMove: false,
+        },
+        {
+          kind: 'mindmap',
+          title: 'درخت دانش / مایندمپ',
+          format: '.json',
+          accept: '.json',
+          modeTarget: 'mindmap',
+          modeLabel: 'مشاهده در مایندمپ',
+          icon: Network,
+          inputRef: mindmapInputRef,
+          present: hasMindmap,
+          displayName:
+            selectedLesson.resourceLabels?.mindmap ||
+            (hasMindmap ? selectedLesson.mindmap.title : `درخت دانش ${selectedLesson.title}`),
+          metaText: hasMindmap
+            ? `${countTreeNodes(selectedLesson.mindmap)} گره مفهومی`
+            : 'فایل درخت دانش ثبت نشده است',
+          supportsAppendOnMove: false,
+        },
+        {
+          kind: 'flashcards',
+          title: 'فلش‌کارت‌های مرور',
+          format: '.csv',
+          accept: '.csv',
+          modeTarget: 'flashcards',
+          modeLabel: 'مرور فلش‌کارت‌ها',
+          icon: Layers,
+          inputRef: flashcardsInputRef,
+          present: hasFlashcards,
+          displayName:
+            selectedLesson.resourceLabels?.flashcards || `مجموعه فلش‌کارت ${selectedLesson.title}`,
+          metaText: hasFlashcards
+            ? `${totalLessonFlashcards} کارت${selectedCustomCards.length > 0 ? ` (${selectedCustomCards.length} کارت شخصی)` : ''}`
+            : 'فایل فلش‌کارت ثبت نشده است',
+          supportsAppendOnMove: true,
+        },
+        {
+          kind: 'quiz',
+          title: 'آزمون تستی',
+          format: '.json',
+          accept: '.json',
+          modeTarget: 'quiz',
+          modeLabel: 'شروع آزمون',
+          icon: CheckSquare,
+          inputRef: quizInputRef,
+          present: hasQuiz,
+          displayName: selectedLesson.resourceLabels?.quiz || `آزمون ${selectedLesson.title}`,
+          metaText: hasQuiz
+            ? `${selectedLesson.quiz.length} سوال${multiQuizCount > 0 ? ` · ${multiQuizCount} چندگزینه‌ای` : ''}`
+            : 'فایل آزمون ثبت نشده است',
+          supportsAppendOnMove: true,
+        },
+      ]
+    : [];
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-6 lg:px-10 lg:py-8">
@@ -679,7 +678,63 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
         </form>
       )}
 
-      {/* 2-Column Split Management Workspace */}
+      {/* Empty State when no lessons exist yet */}
+      {!selectedLesson ? (
+        <div className="elevation-tier-1 rounded-2xl border border-[#E2E8F0] bg-[#FAF9F6] px-6 py-12 text-center dark:border-[#27323E] dark:bg-[#161D24] sm:px-10 sm:py-16">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#0D9488]/25 bg-[#F0FDFA] text-[#0D9488] dark:border-[#14B8A6]/30 dark:bg-[#0F2928] dark:text-[#2DD4BF]">
+            <FolderCog className="h-7 w-7" />
+          </div>
+          <h2 className="mt-4 text-lg font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+            هنوز درسی در جادرسی ایجاد نشده است
+          </h2>
+          <p className="mx-auto mt-2 max-w-[500px] text-xs leading-6 text-[#64748B] dark:text-[#94A3B8]">
+            برای شروع مطالعه، اولین درس خود را بسازید یا فایل‌های آموزشی خود شامل جزوه Markdown، درخت دانش، فلش‌کارت و آزمون تستی را به صورت یکجا وارد کنید.
+          </p>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={onOpenBatchImport}
+              className="flex items-center gap-2 rounded-xl bg-[#0D9488] px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E]"
+            >
+              <FileUp className="h-4 w-4 shrink-0" />
+              <span>ایجاد درس و ورود فایل‌ها (.md / .csv / .json)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-[#CBD5E1] bg-white px-4 py-2.5 text-xs font-semibold text-[#334155] transition-colors hover:border-[#0D9488] hover:text-[#0D9488] dark:border-[#364554] dark:bg-[#1C252E] dark:text-[#E2E8F0] dark:hover:border-[#2DD4BF] dark:hover:text-[#2DD4BF]"
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              <span>ساخت درس خالی جدید</span>
+            </button>
+          </div>
+
+          <div className="mx-auto mt-8 grid max-w-[680px] grid-cols-2 gap-3 border-t border-[#E2E8F0] pt-6 text-right dark:border-[#27323E] sm:grid-cols-4">
+            <div className="rounded-xl border border-[#E2E8F0] bg-white p-3 dark:border-[#27323E] dark:bg-[#1C252E]">
+              <BookOpen className="h-4 w-4 text-[#0D9488] dark:text-[#2DD4BF]" />
+              <p className="mt-2 text-xs font-semibold text-[#0F172A] dark:text-[#F1F5F9]">جزوه درسی</p>
+              <p className="ltr-inline mt-0.5 font-mono text-[11px] text-[#64748B] dark:text-[#94A3B8]">.md</p>
+            </div>
+            <div className="rounded-xl border border-[#E2E8F0] bg-white p-3 dark:border-[#27323E] dark:bg-[#1C252E]">
+              <Network className="h-4 w-4 text-[#0D9488] dark:text-[#2DD4BF]" />
+              <p className="mt-2 text-xs font-semibold text-[#0F172A] dark:text-[#F1F5F9]">درخت دانش</p>
+              <p className="ltr-inline mt-0.5 font-mono text-[11px] text-[#64748B] dark:text-[#94A3B8]">.json</p>
+            </div>
+            <div className="rounded-xl border border-[#E2E8F0] bg-white p-3 dark:border-[#27323E] dark:bg-[#1C252E]">
+              <Layers className="h-4 w-4 text-[#0D9488] dark:text-[#2DD4BF]" />
+              <p className="mt-2 text-xs font-semibold text-[#0F172A] dark:text-[#F1F5F9]">فلش‌کارت</p>
+              <p className="ltr-inline mt-0.5 font-mono text-[11px] text-[#64748B] dark:text-[#94A3B8]">.csv</p>
+            </div>
+            <div className="rounded-xl border border-[#E2E8F0] bg-white p-3 dark:border-[#27323E] dark:bg-[#1C252E]">
+              <CheckSquare className="h-4 w-4 text-[#0D9488] dark:text-[#2DD4BF]" />
+              <p className="mt-2 text-xs font-semibold text-[#0F172A] dark:text-[#F1F5F9]">آزمون تستی</p>
+              <p className="ltr-inline mt-0.5 font-mono text-[11px] text-[#64748B] dark:text-[#94A3B8]">.json</p>
+            </div>
+          </div>
+        </div>
+      ) : (
+      /* 2-Column Split Management Workspace */
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[330px_minmax(0,1fr)]">
         {/* Right Column (RTL Start): Lessons Directory */}
         <section className="rounded-2xl border border-[#E2E8F0] bg-[#FAF9F6] p-4 dark:border-[#27323E] dark:bg-[#161D24]">
@@ -825,15 +880,10 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
                         </button>
                         <button
                           type="button"
-                          disabled={lessons.length <= 1}
                           onClick={() => setConfirmDeleteLesson(lesson)}
-                          title={
-                            lessons.length <= 1
-                              ? 'حداقل یک درس باید باقی بماند'
-                              : 'حذف درس'
-                          }
+                          title="حذف درس"
                           aria-label={`حذف ${lesson.title}`}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-[#64748B] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-35 dark:text-[#94A3B8] dark:hover:bg-[#7F1D1D]/30 dark:hover:text-[#F87171]"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-[#64748B] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] dark:text-[#94A3B8] dark:hover:bg-[#7F1D1D]/30 dark:hover:text-[#F87171]"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -1281,6 +1331,7 @@ export const ResourceManagerWorkspace: React.FC<ResourceManagerWorkspaceProps> =
           </div>
         </section>
       </div>
+      )}
     </div>
   );
 };

@@ -40,7 +40,7 @@ export interface LessonImportPayload {
 interface ImportModalProps {
   open: boolean;
   onClose: () => void;
-  activeLesson: Lesson;
+  activeLesson: Lesson | null;
   nextChapterNumber: number;
   onApplyImport: (payload: LessonImportPayload) => void;
   onDeleteCustomLesson?: (lessonId: string) => void;
@@ -70,7 +70,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   onApplyImport,
   onDeleteCustomLesson,
 }) => {
-  const [importMode, setImportMode] = useState<'update' | 'create'>('update');
+  const [importMode, setImportMode] = useState<'update' | 'create'>(
+    activeLesson ? 'update' : 'create'
+  );
   const [title, setTitle] = useState('');
   const [course, setCourse] = useState('');
   const [code, setCode] = useState('');
@@ -90,7 +92,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    setImportMode('update');
+    setImportMode(activeLesson ? 'update' : 'create');
     setTitle('');
     setCourse('');
     setCode('');
@@ -99,7 +101,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     setCsvSlot(EMPTY_SLOT());
     setQuizSlot(EMPTY_SLOT());
     setMmSlot(EMPTY_SLOT());
-  }, [open, activeLesson.id]);
+  }, [open, activeLesson?.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -112,7 +114,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
   if (!open) return null;
 
-  const targetChapterNum = importMode === 'create' ? nextChapterNumber : activeLesson.chapterNumber;
+  const effectiveMode: 'update' | 'create' = activeLesson ? importMode : 'create';
+  const targetChapterNum =
+    effectiveMode === 'create' ? nextChapterNumber : activeLesson!.chapterNumber;
 
   const processFileForSlot = async (file: File, forcedSlot?: SlotKey) => {
     setGlobalError(null);
@@ -164,7 +168,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
     if (targetSlot === 'flashcards') {
       try {
-        const parsed = parseFlashcardsCsv(text, importMode === 'create' ? `new-${nextChapterNumber}` : activeLesson.id);
+        const parsed = parseFlashcardsCsv(
+          text,
+          effectiveMode === 'create' ? `new-${nextChapterNumber}` : activeLesson!.id
+        );
         setCsvSlot({
           fileName: file.name,
           data: parsed,
@@ -235,7 +242,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
   const hasAnyValidImport = Boolean(mdSlot.data || csvSlot.data || quizSlot.data || mmSlot.data);
   const canSubmit =
-    importMode === 'update'
+    effectiveMode === 'update'
       ? hasAnyValidImport
       : Boolean(title.trim() || hasAnyValidImport);
 
@@ -248,19 +255,19 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       mdSlot.data?.title ||
       mmSlot.data?.title ||
       quizSlot.data?.title ||
-      (importMode === 'create' ? `فصل ${nextChapterNumber}: درس واردشده` : activeLesson.title);
+      (effectiveMode === 'create' ? `فصل ${nextChapterNumber}: درس جدید` : activeLesson!.title);
 
     const resolvedCourse =
       course.trim() ||
       mmSlot.data?.course ||
-      (importMode === 'create' ? 'درس‌های واردشده کاربر' : activeLesson.course);
+      (effectiveMode === 'create' ? 'درس‌های شخصی جادرسی' : activeLesson!.course);
 
     const resolvedCode =
       code.trim() ||
-      (importMode === 'create' ? `IMP-${100 + nextChapterNumber}` : activeLesson.code);
+      (effectiveMode === 'create' ? `JDR-${100 + nextChapterNumber}` : activeLesson!.code);
 
     onApplyImport({
-      mode: importMode,
+      mode: effectiveMode,
       title: resolvedTitle,
       course: resolvedCourse,
       code: resolvedCode,
@@ -369,9 +376,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             <div className="grid grid-cols-2 gap-1 rounded-xl bg-[#E2E8F0] p-1 dark:bg-[#1E293B]">
               <button
                 type="button"
-                onClick={() => setImportMode('update')}
-                className={`flex items-center justify-center gap-2 rounded-lg py-2 text-xs transition-colors ${
-                  importMode === 'update'
+                disabled={!activeLesson}
+                onClick={() => activeLesson && setImportMode('update')}
+                className={`flex items-center justify-center gap-2 rounded-lg py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                  effectiveMode === 'update'
                     ? 'border border-[#CBD5E1] bg-white font-semibold text-[#0D9488] dark:border-[#364554] dark:bg-[#161D24] dark:text-[#2DD4BF]'
                     : 'font-medium text-[#64748B] hover:text-[#1E293B] dark:text-[#94A3B8]'
                 }`}
@@ -383,7 +391,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 type="button"
                 onClick={() => setImportMode('create')}
                 className={`flex items-center justify-center gap-2 rounded-lg py-2 text-xs transition-colors ${
-                  importMode === 'create'
+                  effectiveMode === 'create'
                     ? 'border border-[#CBD5E1] bg-white font-semibold text-[#0D9488] dark:border-[#364554] dark:bg-[#161D24] dark:text-[#2DD4BF]'
                     : 'font-medium text-[#64748B] hover:text-[#1E293B] dark:text-[#94A3B8]'
                 }`}
@@ -394,7 +402,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             </div>
 
             {/* Active Lesson Context OR New Lesson Metadata Fields */}
-            {importMode === 'update' ? (
+            {effectiveMode === 'update' && activeLesson ? (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-xs dark:border-[#27323E] dark:bg-[#1C252E]">
                 <div>
                   <span className="text-[#64748B] dark:text-[#94A3B8]">درس فعال برای به‌روزرسانی:</span>
@@ -407,7 +415,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     </span>
                   </div>
                 </div>
-                {activeLesson.isCustom && onDeleteCustomLesson && (
+                {onDeleteCustomLesson && (
                   <button
                     type="button"
                     onClick={() => {
@@ -417,7 +425,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     className="flex items-center gap-1.5 rounded-lg border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-1.5 text-xs font-medium text-[#DC2626] transition-colors hover:bg-[#FEE2E2] dark:border-[#B91C1C]/60 dark:bg-[#7F1D1D]/30 dark:text-[#F87171]"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    <span>حذف این درس سفارشی</span>
+                    <span>حذف این درس</span>
                   </button>
                 )}
               </div>
@@ -613,9 +621,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           {/* Footer */}
           <div className="flex items-center justify-between gap-3 border-t border-[#E2E8F0] bg-white px-6 py-4 dark:border-[#27323E] dark:bg-[#1C252E]">
             <span className="text-xs text-[#64748B] dark:text-[#94A3B8]">
-              {importMode === 'update'
+              {effectiveMode === 'update'
                 ? 'فقط بخش‌هایی که فایل جدید برایشان انتخاب شده به‌روزرسانی می‌شوند.'
-                : 'بخش‌های بدون فایل با ساختار پیش‌فرض قابل ویرایش ایجاد می‌شوند.'}
+                : 'می‌توانید بلافاصله فایل‌های درس را اضافه کنید یا بعداً در مدیریت منابع بارگذاری نمایید.'}
             </span>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -630,7 +638,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 disabled={!canSubmit}
                 className="rounded-lg bg-[#0D9488] px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E] disabled:cursor-not-allowed disabled:opacity-45"
               >
-                {importMode === 'update' ? 'ذخیره در درس فعال' : 'ایجاد درس جدید'}
+                {effectiveMode === 'update' ? 'ذخیره در درس فعال' : 'ایجاد درس جدید'}
               </button>
             </div>
           </div>

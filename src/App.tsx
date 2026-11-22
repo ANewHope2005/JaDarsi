@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CURRICULUM } from './data/curriculum';
+import { BookOpen, CheckSquare, FileUp, FolderCog, Layers, Network } from 'lucide-react';
 import {
   Flashcard,
   FlashcardStatus,
@@ -37,14 +37,37 @@ const STORAGE_KEYS = {
   fontScale: 'archival_scholar_font_scale',
   cardStatuses: 'archival_scholar_fc_statuses',
   customCards: 'archival_scholar_custom_cards',
-  bookmarks: 'archival_scholar_bookmarks',
-  notes: 'archival_scholar_notes',
+  bookmarks: 'jadarsi_bookmarks_v2',
+  notes: 'jadarsi_notes_v2',
   quizScores: 'archival_scholar_quiz_scores',
-  lessons: 'archival_scholar_lessons_v1',
+  lessons: 'jadarsi_lessons_v2',
+  legacyLessons: 'archival_scholar_lessons_v1',
   rightSidebar: 'archival_scholar_right_sidebar',
   leftSidebar: 'archival_scholar_left_sidebar',
   highlights: 'archival_scholar_highlights_v1',
 };
+
+const LEGACY_SAMPLE_IDS = new Set([
+  'thermodynamics-entropy',
+  'algorithms-recurrence',
+  'linear-algebra-svd',
+  'biochemistry-kinetics',
+]);
+
+function readInitialLessons(): Lesson[] {
+  const savedV2 = readStorage<Lesson[] | null>(STORAGE_KEYS.lessons, null);
+  if (Array.isArray(savedV2)) return savedV2;
+
+  // One-time migration: preserve only user-created custom lessons, never built-in samples
+  const legacy = readStorage<Lesson[] | null>(STORAGE_KEYS.legacyLessons, null);
+  if (Array.isArray(legacy)) {
+    return legacy
+      .filter((l) => l && l.isCustom === true && !LEGACY_SAMPLE_IDS.has(l.id))
+      .map((l, idx) => ({ ...l, chapterNumber: idx + 1 }));
+  }
+
+  return [];
+}
 
 function readStorage<T>(key: string, fallback: T): T {
   try {
@@ -89,26 +112,10 @@ function todayPersianDate(): string {
   });
 }
 
-const DEFAULT_NOTES: UserNote[] = [
-  {
-    id: 'welcome-note-1',
-    lessonId: 'thermodynamics-entropy',
-    sectionId: 'carnot-gibbs',
-    title: 'یادآور تبدیل واحد دما در چرخه کارنو',
-    content:
-      'در محاسبه بازده کارنو (1 - T_C/T_H) همیشه دماها را پیش از جایگذاری با افزودن ۲۷۳.۱۵ به کلوین تبدیل کن تا خطای رایج سلسیوس رخ ندهد.',
-    createdAt: 'ثبت اولیه در جادرسی',
-  },
-];
-
 export default function App() {
-  const [lessons, setLessons] = useState<Lesson[]>(() => {
-    const saved = readStorage<Lesson[] | null>(STORAGE_KEYS.lessons, null);
-    if (Array.isArray(saved) && saved.length > 0) return saved;
-    return CURRICULUM;
-  });
+  const [lessons, setLessons] = useState<Lesson[]>(() => readInitialLessons());
 
-  const [activeLessonId, setActiveLessonId] = useState<string>(() => lessons[0]?.id ?? CURRICULUM[0].id);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(() => lessons[0]?.id ?? null);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('notes');
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => readThemePreference());
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => getSystemPrefersDark());
@@ -131,10 +138,10 @@ export default function App() {
     readStorage(STORAGE_KEYS.customCards, {})
   );
   const [bookmarkedSections, setBookmarkedSections] = useState<string[]>(() =>
-    readStorage(STORAGE_KEYS.bookmarks, ['thermodynamics-entropy:boltzmann-entropy'])
+    readStorage(STORAGE_KEYS.bookmarks, [])
   );
   const [userNotes, setUserNotes] = useState<UserNote[]>(() =>
-    readStorage(STORAGE_KEYS.notes, DEFAULT_NOTES)
+    readStorage(STORAGE_KEYS.notes, [])
   );
   const [quizBestScores, setQuizBestScores] = useState<Record<string, number>>(() =>
     readStorage(STORAGE_KEYS.quizScores, {})
@@ -149,8 +156,8 @@ export default function App() {
   const [mobileSyllabusOpen, setMobileSyllabusOpen] = useState(false);
   const [focusSectionId, setFocusSectionId] = useState<string | null>(null);
 
-  const activeLesson = useMemo(
-    () => lessons.find((l) => l.id === activeLessonId) ?? lessons[0] ?? CURRICULUM[0],
+  const activeLesson = useMemo<Lesson | null>(
+    () => lessons.find((l) => l.id === activeLessonId) ?? lessons[0] ?? null,
     [lessons, activeLessonId]
   );
 
@@ -223,6 +230,7 @@ export default function App() {
   }, []);
 
   const activeLessonCards = useMemo(() => {
+    if (!activeLesson) return [];
     const custom = customCardsByLesson[activeLesson.id] ?? [];
     return [...activeLesson.flashcards, ...custom];
   }, [activeLesson, customCardsByLesson]);
@@ -288,6 +296,7 @@ export default function App() {
   };
 
   const handleAddCustomCard = (card: Omit<Flashcard, 'id' | 'isCustom'>) => {
+    if (!activeLesson) return;
     const newCard: Flashcard = {
       ...card,
       id: `custom-${Date.now()}`,
@@ -347,6 +356,7 @@ export default function App() {
     });
 
     if (payload.mode === 'update') {
+      if (!activeLesson) return;
       setLessons((prev) =>
         prev.map((lesson) => {
           if (lesson.id !== activeLesson.id) return lesson;
@@ -370,35 +380,9 @@ export default function App() {
       return;
     }
 
-    // Create a brand new lesson/chapter
+    // Create a brand new lesson/chapter without injecting any dummy content
     const newId = `lesson-custom-${Date.now().toString(36)}`;
     const chapterNumber = lessons.length + 1;
-
-    const fallbackSection = {
-      id: `sec-${newId}-1`,
-      number: `${chapterNumber}.1`,
-      title: 'مقدمه فصل',
-      paragraphs: [
-        'هنوز فایل جزوه Markdown (.md) برای این درس بارگذاری نشده است. می‌توانید از دکمه «ورود فایل‌ها / مدیریت درس» در نوار بالا، جزوه کامل را اضافه کنید.',
-      ],
-    };
-
-    const fallbackMindmap: MindmapNode = {
-      id: `mm-${newId}-root`,
-      title: payload.title,
-      subtitle: payload.code,
-      summary:
-        payload.markdown?.summary ??
-        payload.quiz?.description ??
-        'برای مشاهده درخت دانش کامل، فایل JSON مایندمپ را در این درس بارگذاری کنید.',
-      children: (payload.markdown?.sections ?? []).map((sec, idx) => ({
-        id: `mm-${newId}-s-${idx}`,
-        title: sec.title,
-        subtitle: sec.number,
-        summary: `بخش ${sec.number} از جزوه ${payload.title}`,
-        sectionId: sec.id,
-      })),
-    };
 
     const newLesson: Lesson = {
       id: newId,
@@ -410,16 +394,13 @@ export default function App() {
         payload.markdown?.subtitle ??
         payload.mindmap?.subtitle ??
         payload.quiz?.description ??
-        'محتوای مطالعاتی واردشده توسط کاربر',
-      readingMinutes: payload.markdown?.readingMinutes ?? 5,
+        '',
+      readingMinutes: payload.markdown?.readingMinutes ?? 0,
       lastUpdated: todayFa,
       author: 'کتابخانه شخصی جادرسی',
-      summary:
-        payload.markdown?.summary ??
-        payload.quiz?.description ??
-        `فصل ${chapterNumber} شامل منابع واردشده برای مبحث ${payload.title}.`,
-      sections: payload.markdown?.sections ?? [fallbackSection],
-      mindmap: payload.mindmap?.root ?? fallbackMindmap,
+      summary: payload.markdown?.summary ?? payload.quiz?.description ?? '',
+      sections: payload.markdown?.sections ?? [],
+      mindmap: payload.mindmap?.root ?? createEmptyMindmapNode(newId, payload.title),
       flashcards: payload.flashcards ?? [],
       quiz: payload.quiz?.questions ?? [],
       isCustom: true,
@@ -433,6 +414,7 @@ export default function App() {
     else if (payload.mindmap) setWorkspaceMode('mindmap');
     else if (payload.flashcards) setWorkspaceMode('flashcards');
     else if (payload.quiz) setWorkspaceMode('quiz');
+    else setWorkspaceMode('notes');
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -440,12 +422,11 @@ export default function App() {
   const handleDeleteLesson = useCallback(
     (lessonId: string) => {
       setLessons((prev) => {
-        if (prev.length <= 1) return prev;
         const remaining = prev
           .filter((l) => l.id !== lessonId)
           .map((l, idx) => ({ ...l, chapterNumber: idx + 1 }));
-        if (activeLessonId === lessonId && remaining[0]) {
-          setActiveLessonId(remaining[0].id);
+        if (activeLessonId === lessonId) {
+          setActiveLessonId(remaining[0]?.id ?? null);
         }
         return remaining;
       });
@@ -812,18 +793,18 @@ export default function App() {
   };
 
   const activeLessonNotes = useMemo(
-    () => userNotes.filter((n) => n.lessonId === activeLesson.id),
-    [userNotes, activeLesson.id]
+    () => (activeLesson ? userNotes.filter((n) => n.lessonId === activeLesson.id) : []),
+    [userNotes, activeLesson]
   );
 
   const activeLessonHighlights = useMemo(
-    () => highlights.filter((h) => h.lessonId === activeLesson.id),
-    [highlights, activeLesson.id]
+    () => (activeLesson ? highlights.filter((h) => h.lessonId === activeLesson.id) : []),
+    [highlights, activeLesson]
   );
 
   const handleAddHighlight = useCallback(
     (payload: NewHighlightPayload) => {
-      if (payload.anchors.length === 0) return;
+      if (!activeLesson || payload.anchors.length === 0) return;
       const now = new Date().toLocaleDateString('fa-IR', {
         month: 'short',
         day: 'numeric',
@@ -867,7 +848,7 @@ export default function App() {
         return next;
       });
     },
-    [activeLesson.id]
+    [activeLesson]
   );
 
   const handleRemoveHighlight = useCallback((highlightId: string) => {
@@ -888,6 +869,7 @@ export default function App() {
   };
 
   const handleClearLessonHighlights = () => {
+    if (!activeLesson) return;
     setHighlights((prev) => prev.filter((h) => h.lessonId !== activeLesson.id));
   };
 
@@ -919,7 +901,105 @@ export default function App() {
         lessonMasteryMap={lessonMasteryMap}
       />
 
-      {workspaceMode === 'notes' && (
+      {workspaceMode !== 'resources' && !activeLesson && (
+        <main className="mx-auto max-w-[920px] px-4 py-10 md:px-6 lg:py-16">
+          <div className="elevation-tier-1 rounded-3xl border border-[#E2E8F0] bg-[#FAF9F6] px-6 py-12 text-center dark:border-[#27323E] dark:bg-[#161D24] sm:px-12 sm:py-16">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0D9488] text-white shadow-sm">
+              <BookOpen className="h-8 w-8" />
+            </div>
+
+            <h1 className="mt-5 text-2xl font-bold tracking-tight text-[#0F172A] dark:text-[#F8FAFC] sm:text-3xl">
+              به جادرسی خوش آمدید
+            </h1>
+            <p className="mx-auto mt-3 max-w-[540px] text-sm leading-7 text-[#475569] dark:text-[#94A3B8]">
+              میز مطالعه شما کاملاً تمیز و آماده شروع است. اولین درس خود را ایجاد کنید و جزوه، درخت دانش، فلش‌کارت یا آزمون تستی آن را وارد نمایید.
+            </p>
+
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setImportModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0D9488] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0F766E]"
+              >
+                <FileUp className="h-4 w-4 shrink-0" />
+                <span>ایجاد درس جدید و ورود فایل‌ها</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWorkspaceMode('resources')}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-white px-5 py-3 text-sm font-semibold text-[#334155] transition-colors hover:border-[#0D9488] hover:text-[#0D9488] dark:border-[#364554] dark:bg-[#1C252E] dark:text-[#E2E8F0] dark:hover:border-[#2DD4BF] dark:hover:text-[#2DD4BF]"
+              >
+                <FolderCog className="h-4 w-4 shrink-0" />
+                <span>باز کردن مدیریت منابع</span>
+              </button>
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 gap-3 border-t border-[#E2E8F0] pt-8 text-right dark:border-[#27323E] sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 dark:border-[#27323E] dark:bg-[#1C252E]">
+                <div className="flex items-center justify-between">
+                  <BookOpen className="h-4.5 w-4.5 text-[#0D9488] dark:text-[#2DD4BF]" />
+                  <span className="ltr-inline font-mono text-[11px] font-medium text-[#64748B] dark:text-[#94A3B8]">
+                    .md
+                  </span>
+                </div>
+                <h2 className="mt-2.5 text-xs font-bold text-[#0F172A] dark:text-[#F1F5F9]">
+                  جزوه درسی
+                </h2>
+                <p className="mt-1 text-[11px] leading-5 text-[#64748B] dark:text-[#94A3B8]">
+                  پشتیبانی از فارسی راست‌به‌چپ، فرمول‌های LaTeX و هایلایت متن
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 dark:border-[#27323E] dark:bg-[#1C252E]">
+                <div className="flex items-center justify-between">
+                  <Network className="h-4.5 w-4.5 text-[#0D9488] dark:text-[#2DD4BF]" />
+                  <span className="ltr-inline font-mono text-[11px] font-medium text-[#64748B] dark:text-[#94A3B8]">
+                    .json
+                  </span>
+                </div>
+                <h2 className="mt-2.5 text-xs font-bold text-[#0F172A] dark:text-[#F1F5F9]">
+                  مایندمپ و درخت دانش
+                </h2>
+                <p className="mt-1 text-[11px] leading-5 text-[#64748B] dark:text-[#94A3B8]">
+                  نمای درختی و گرافیکی تعاملی با بازرس مفاهیم و فرمول‌ها
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 dark:border-[#27323E] dark:bg-[#1C252E]">
+                <div className="flex items-center justify-between">
+                  <Layers className="h-4.5 w-4.5 text-[#0D9488] dark:text-[#2DD4BF]" />
+                  <span className="ltr-inline font-mono text-[11px] font-medium text-[#64748B] dark:text-[#94A3B8]">
+                    .csv
+                  </span>
+                </div>
+                <h2 className="mt-2.5 text-xs font-bold text-[#0F172A] dark:text-[#F1F5F9]">
+                  فلش‌کارت مرور
+                </h2>
+                <p className="mt-1 text-[11px] leading-5 text-[#64748B] dark:text-[#94A3B8]">
+                  مرور هوشمند با میانبرهای صفحه‌کلید و ثبت میزان تسلط
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 dark:border-[#27323E] dark:bg-[#1C252E]">
+                <div className="flex items-center justify-between">
+                  <CheckSquare className="h-4.5 w-4.5 text-[#0D9488] dark:text-[#2DD4BF]" />
+                  <span className="ltr-inline font-mono text-[11px] font-medium text-[#64748B] dark:text-[#94A3B8]">
+                    .json
+                  </span>
+                </div>
+                <h2 className="mt-2.5 text-xs font-bold text-[#0F172A] dark:text-[#F1F5F9]">
+                  آزمون تستی دوحالته
+                </h2>
+                <p className="mt-1 text-[11px] leading-5 text-[#64748B] dark:text-[#94A3B8]">
+                  ارزیابی در حالت بازخورد آنی یا آزمون زمان‌دار با کارنامه
+                </p>
+              </div>
+            </div>
+          </div>
+        </main>
+      )}
+
+      {workspaceMode === 'notes' && activeLesson && (
         <ArticleWorkspace
           lessons={lessons}
           activeLesson={activeLesson}
@@ -952,19 +1032,21 @@ export default function App() {
           onRestoreHighlight={handleRestoreHighlight}
           onUpdateHighlightColor={handleUpdateHighlightColor}
           onClearLessonHighlights={handleClearLessonHighlights}
+          onOpenImportModal={() => setImportModalOpen(true)}
         />
       )}
 
-      {workspaceMode === 'mindmap' && (
+      {workspaceMode === 'mindmap' && activeLesson && (
         <MindmapWorkspace
           lesson={activeLesson}
           onJumpToSection={handleJumpToSection}
           onCreateFlashcardFromNode={handleCreateFlashcardFromNode}
+          onOpenImportModal={() => setImportModalOpen(true)}
           onOpenResources={() => setWorkspaceMode('resources')}
         />
       )}
 
-      {workspaceMode === 'flashcards' && (
+      {workspaceMode === 'flashcards' && activeLesson && (
         <FlashcardWorkspace
           lesson={activeLesson}
           cards={activeLessonCards}
@@ -973,22 +1055,25 @@ export default function App() {
           onResetLessonStatuses={handleResetLessonCardStatuses}
           onAddCustomCard={handleAddCustomCard}
           onJumpToSection={handleJumpToSection}
+          onOpenImportModal={() => setImportModalOpen(true)}
+          onOpenResources={() => setWorkspaceMode('resources')}
         />
       )}
 
-      {workspaceMode === 'quiz' && (
+      {workspaceMode === 'quiz' && activeLesson && (
         <QuizWorkspace
           lesson={activeLesson}
           onJumpToSection={handleJumpToSection}
           onSaveQuizBestScore={handleSaveQuizBestScore}
           onOpenImportModal={() => setImportModalOpen(true)}
+          onOpenResources={() => setWorkspaceMode('resources')}
         />
       )}
 
       {workspaceMode === 'resources' && (
         <ResourceManagerWorkspace
           lessons={lessons}
-          activeLessonId={activeLesson.id}
+          activeLessonId={activeLesson?.id ?? null}
           customCardsByLesson={customCardsByLesson}
           onSelectLesson={(id) => setActiveLessonId(id)}
           onOpenLessonInMode={(id, mode) => {

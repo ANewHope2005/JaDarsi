@@ -21,6 +21,7 @@ interface QuizWorkspaceProps {
   onJumpToSection: (sectionId: string) => void;
   onSaveQuizBestScore: (lessonId: string, scorePercent: number) => void;
   onOpenImportModal?: () => void;
+  onOpenResources?: () => void;
 }
 
 type QuizMode = 'instant' | 'exam';
@@ -42,6 +43,7 @@ export const QuizWorkspace: React.FC<QuizWorkspaceProps> = ({
   onJumpToSection,
   onSaveQuizBestScore,
   onOpenImportModal,
+  onOpenResources,
 }) => {
   const [mode, setMode] = useState<QuizMode>('instant');
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -170,16 +172,27 @@ export const QuizWorkspace: React.FC<QuizWorkspaceProps> = ({
           <p className="mt-2 text-xs leading-6 text-[#64748B] dark:text-[#94A3B8]">
             می‌توانید یک فایل آزمون JSON شامل سوالات تک‌گزینه‌ای و چندگزینه‌ای را مستقیماً به این فصل اضافه کنید.
           </p>
-          {onOpenImportModal && (
-            <button
-              type="button"
-              onClick={onOpenImportModal}
-              className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E]"
-            >
-              <FileUp className="h-4 w-4" />
-              <span>ورود فایل آزمون (.json)</span>
-            </button>
-          )}
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+            {onOpenImportModal && (
+              <button
+                type="button"
+                onClick={onOpenImportModal}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E]"
+              >
+                <FileUp className="h-4 w-4" />
+                <span>ورود فایل آزمون (.json)</span>
+              </button>
+            )}
+            {onOpenResources && (
+              <button
+                type="button"
+                onClick={onOpenResources}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-xs font-medium text-[#334155] transition-colors hover:border-[#0D9488] hover:text-[#0D9488] dark:border-[#364554] dark:bg-[#1C252E] dark:text-[#E2E8F0] dark:hover:border-[#2DD4BF]"
+              >
+                <span>مدیریت منابع</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

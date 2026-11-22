@@ -13,6 +13,7 @@ import {
   GitBranch,
   ListTree,
   Check,
+  FileUp,
 } from 'lucide-react';
 import { Lesson, MindmapNode } from '../types/study';
 import { FormulaDisplay, RichMathText } from '../utils/latexText';
@@ -22,6 +23,7 @@ interface MindmapWorkspaceProps {
   lesson: Lesson;
   onJumpToSection: (sectionId: string) => void;
   onCreateFlashcardFromNode: (node: MindmapNode) => void;
+  onOpenImportModal?: () => void;
   onOpenResources?: () => void;
 }
 
@@ -129,6 +131,7 @@ export const MindmapWorkspace: React.FC<MindmapWorkspaceProps> = ({
   lesson,
   onJumpToSection,
   onCreateFlashcardFromNode,
+  onOpenImportModal,
   onOpenResources,
 }) => {
   const [viewType, setViewType] = useState<'tree' | 'graph'>('tree');
@@ -285,17 +288,29 @@ export const MindmapWorkspace: React.FC<MindmapWorkspaceProps> = ({
             درخت دانشی برای «{lesson.title}» ثبت نشده است
           </h2>
           <p className="mt-2 text-xs leading-6 text-[#64748B] dark:text-[#94A3B8]">
-            برای مشاهده نقشه مفهومی و درخت دانش، فایل JSON مایندمپ این درس را از بخش مدیریت منابع بارگذاری کنید.
+            برای مشاهده نقشه مفهومی و درخت دانش، فایل JSON مایندمپ این درس را بارگذاری کنید.
           </p>
-          {onOpenResources && (
-            <button
-              type="button"
-              onClick={onOpenResources}
-              className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-[#0D9488] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E]"
-            >
-              <span>افزودن درخت دانش در مدیریت منابع</span>
-            </button>
-          )}
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+            {onOpenImportModal && (
+              <button
+                type="button"
+                onClick={onOpenImportModal}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0D9488] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E]"
+              >
+                <FileUp className="h-3.5 w-3.5" />
+                <span>ورود فایل مایندمپ (.json)</span>
+              </button>
+            )}
+            {onOpenResources && (
+              <button
+                type="button"
+                onClick={onOpenResources}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-xs font-medium text-[#334155] transition-colors hover:border-[#0D9488] hover:text-[#0D9488] dark:border-[#364554] dark:bg-[#1C252E] dark:text-[#E2E8F0] dark:hover:border-[#2DD4BF]"
+              >
+                <span>مدیریت منابع</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

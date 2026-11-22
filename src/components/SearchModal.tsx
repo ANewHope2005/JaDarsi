@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Layers, Network, Search, X, CheckSquare } from 'lucide-react';
 import { Lesson, MindmapNode, WorkspaceMode } from '../types/study';
+import { isMindmapEmpty } from './ResourceManagerWorkspace';
 
 interface SearchModalProps {
   open: boolean;
@@ -66,17 +67,19 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           sectionId: sec.id,
         });
       }
-      for (const node of flattenMindmap(lesson.mindmap)) {
-        items.push({
-          id: `mm-${lesson.id}-${node.id}`,
-          lessonId: lesson.id,
-          lessonTitle: lesson.title,
-          mode: 'mindmap',
-          modeLabel: 'مایندمپ',
-          title: node.title,
-          snippet: node.formula ? `${node.formula} — ${node.summary}` : node.summary,
-          sectionId: node.sectionId,
-        });
+      if (!isMindmapEmpty(lesson.mindmap)) {
+        for (const node of flattenMindmap(lesson.mindmap)) {
+          items.push({
+            id: `mm-${lesson.id}-${node.id}`,
+            lessonId: lesson.id,
+            lessonTitle: lesson.title,
+            mode: 'mindmap',
+            modeLabel: 'مایندمپ',
+            title: node.title,
+            snippet: node.formula ? `${node.formula} — ${node.summary}` : node.summary,
+            sectionId: node.sectionId,
+          });
+        }
       }
       for (const card of lesson.flashcards) {
         items.push({
@@ -166,9 +169,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         </div>
 
         <div className="max-h-[400px] overflow-y-auto p-2">
-          {results.length === 0 ? (
+          {lessons.length === 0 ? (
             <div className="py-12 text-center text-sm text-[#64748B] dark:text-[#94A3B8]">
-              نتیجه‌ای برای «{query}» در جادرسی یافت نشد.
+              هنوز درسی در جادرسی ایجاد نشده است. پس از افزودن درس و فایل‌های آموزشی، می‌توانید اینجا جستجو کنید.
+            </div>
+          ) : results.length === 0 ? (
+            <div className="py-12 text-center text-sm text-[#64748B] dark:text-[#94A3B8]">
+              {query.trim()
+                ? `نتیجه‌ای برای «${query}» در جادرسی یافت نشد.`
+                : 'محتوایی برای نمایش وجود ندارد. فایل‌های درس را در بخش مدیریت منابع بارگذاری کنید.'}
             </div>
           ) : (
             <ul className="space-y-1">

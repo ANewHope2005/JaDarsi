@@ -10,6 +10,8 @@ import {
   Clock,
   X,
   CornerDownLeft,
+  FileUp,
+  Layers,
 } from 'lucide-react';
 import { Flashcard, FlashcardStatus, Lesson } from '../types/study';
 import { FormulaDisplay, RichMathText } from '../utils/latexText';
@@ -22,6 +24,8 @@ interface FlashcardWorkspaceProps {
   onResetLessonStatuses: (cardIds: string[]) => void;
   onAddCustomCard: (card: Omit<Flashcard, 'id' | 'isCustom'>) => void;
   onJumpToSection: (sectionId: string) => void;
+  onOpenImportModal?: () => void;
+  onOpenResources?: () => void;
 }
 
 type DeckFilter = 'all' | 'review' | 'unseen' | 'mastered';
@@ -34,6 +38,8 @@ export const FlashcardWorkspace: React.FC<FlashcardWorkspaceProps> = ({
   onResetLessonStatuses,
   onAddCustomCard,
   onJumpToSection,
+  onOpenImportModal,
+  onOpenResources,
 }) => {
   const [filter, setFilter] = useState<DeckFilter>('all');
   const [shuffled, setShuffled] = useState(false);
@@ -537,6 +543,45 @@ export const FlashcardWorkspace: React.FC<FlashcardWorkspaceProps> = ({
                 </kbd>
               </button>
             </div>
+          </div>
+        </div>
+      ) : counts.total === 0 ? (
+        <div className="elevation-tier-1 mt-6 rounded-2xl bg-[#FAF9F6] px-6 py-14 text-center dark:bg-[#161D24]">
+          <Layers className="mx-auto h-10 w-10 text-[#94A3B8]" />
+          <h2 className="mt-3 text-base font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+            هنوز فلش‌کارتی برای «{lesson.title}» ثبت نشده است
+          </h2>
+          <p className="mt-1.5 text-xs leading-6 text-[#64748B] dark:text-[#94A3B8]">
+            می‌توانید فایل CSV فلش‌کارت‌ها را وارد کنید یا اولین کارت مرور را به صورت دستی بسازید.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+            {onOpenImportModal && (
+              <button
+                type="button"
+                onClick={onOpenImportModal}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0D9488] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E]"
+              >
+                <FileUp className="h-3.5 w-3.5" />
+                <span>ورود فایل فلش‌کارت (.csv)</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowAddForm(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-xs font-semibold text-[#334155] transition-colors hover:border-[#0D9488] hover:text-[#0D9488] dark:border-[#364554] dark:bg-[#1C252E] dark:text-[#E2E8F0] dark:hover:border-[#2DD4BF]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>ساخت کارت جدید</span>
+            </button>
+            {onOpenResources && (
+              <button
+                type="button"
+                onClick={onOpenResources}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-xs font-medium text-[#475569] transition-colors hover:border-[#0D9488] hover:text-[#0D9488] dark:border-[#364554] dark:bg-[#1C252E] dark:text-[#CBD5E1] dark:hover:border-[#2DD4BF]"
+              >
+                <span>مدیریت منابع</span>
+              </button>
+            )}
           </div>
         </div>
       ) : (

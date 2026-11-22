@@ -20,7 +20,7 @@ import { Lesson, ThemePreference, WorkspaceMode } from '../types/study';
 
 interface HeaderProps {
   lessons: Lesson[];
-  activeLesson: Lesson;
+  activeLesson: Lesson | null;
   onSelectLesson: (lessonId: string) => void;
   workspaceMode: WorkspaceMode;
   onChangeMode: (mode: WorkspaceMode) => void;
@@ -219,49 +219,55 @@ export const Header: React.FC<HeaderProps> = ({
         </span>
       </div>
       <ul className="mt-1.5 max-h-[55vh] space-y-1 overflow-y-auto">
-        {lessons.map((lesson) => {
-          const isSelected = lesson.id === activeLesson.id;
-          const mastery = lessonMasteryMap[lesson.id] ?? 0;
-          return (
-            <li key={lesson.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onSelectLesson(lesson.id);
-                  setDropdownOpen(false);
-                }}
-                className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-right transition-colors ${
-                  isSelected
-                    ? 'bg-[#F0FDFA] text-[#0F766E] dark:bg-[#0F2928] dark:text-[#2DD4BF]'
-                    : 'text-[#1E293B] hover:bg-[#F8FAFC] dark:text-[#E2E8F0] dark:hover:bg-[#24303C]'
-                }`}
-              >
-                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[#E2E8F0] bg-white font-mono text-xs font-semibold text-[#334155] tabular-nums dark:border-[#364554] dark:bg-[#161D24] dark:text-[#CBD5E1]">
-                  {lesson.chapterNumber}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold">{lesson.title}</span>
-                    {isSelected && <Check className="h-4 w-4 shrink-0 text-[#0D9488]" />}
+        {lessons.length === 0 ? (
+          <li className="px-3 py-6 text-center text-xs text-[#64748B] dark:text-[#94A3B8]">
+            هنوز درسی در جادرسی ثبت نشده است.
+          </li>
+        ) : (
+          lessons.map((lesson) => {
+            const isSelected = activeLesson?.id === lesson.id;
+            const mastery = lessonMasteryMap[lesson.id] ?? 0;
+            return (
+              <li key={lesson.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectLesson(lesson.id);
+                    setDropdownOpen(false);
+                  }}
+                  className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-right transition-colors ${
+                    isSelected
+                      ? 'bg-[#F0FDFA] text-[#0F766E] dark:bg-[#0F2928] dark:text-[#2DD4BF]'
+                      : 'text-[#1E293B] hover:bg-[#F8FAFC] dark:text-[#E2E8F0] dark:hover:bg-[#24303C]'
+                  }`}
+                >
+                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[#E2E8F0] bg-white font-mono text-xs font-semibold text-[#334155] tabular-nums dark:border-[#364554] dark:bg-[#161D24] dark:text-[#CBD5E1]">
+                    {lesson.chapterNumber}
                   </div>
-                  <div className="mt-0.5 flex items-center gap-2 text-xs text-[#64748B] dark:text-[#94A3B8]">
-                    <span className="ltr-inline font-mono text-[11px]">{lesson.code}</span>
-                    <span aria-hidden="true">·</span>
-                    <span className="truncate">{lesson.course}</span>
-                    {mastery > 0 && (
-                      <>
-                        <span aria-hidden="true">·</span>
-                        <span className="shrink-0 font-medium text-[#059669] tabular-nums dark:text-[#34D399]">
-                          تسلط {mastery}٪
-                        </span>
-                      </>
-                    )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold">{lesson.title}</span>
+                      {isSelected && <Check className="h-4 w-4 shrink-0 text-[#0D9488]" />}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-[#64748B] dark:text-[#94A3B8]">
+                      <span className="ltr-inline font-mono text-[11px]">{lesson.code}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="truncate">{lesson.course}</span>
+                      {mastery > 0 && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="shrink-0 font-medium text-[#059669] tabular-nums dark:text-[#34D399]">
+                            تسلط {mastery}٪
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
-            </li>
-          );
-        })}
+                </button>
+              </li>
+            );
+          })
+        )}
       </ul>
       <div className="mt-2 flex items-center gap-1.5 border-t border-[#E2E8F0] pt-2 dark:border-[#27323E]">
         <button
@@ -298,7 +304,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Row 1: Right sidebar toggle + Left compact non-shrinking action icons */}
         <div className="flex items-center justify-between gap-2 px-3 py-2">
           <div className="flex shrink-0 items-center gap-2">
-            {workspaceMode === 'notes' && (
+            {workspaceMode === 'notes' && activeLesson && (
               <button
                 type="button"
                 onClick={onOpenMobileSyllabus}
@@ -339,7 +345,7 @@ export const Header: React.FC<HeaderProps> = ({
               <FolderCog className="h-4 w-4" />
             </button>
 
-            {workspaceMode !== 'resources' && (
+            {workspaceMode !== 'resources' && activeLesson && (
               <button
                 type="button"
                 onClick={handlePrint}
@@ -393,12 +399,20 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 text-right transition-colors hover:border-[#CBD5E1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D9488]/40 dark:border-[#27323E] dark:bg-[#1C252E] dark:hover:border-[#364554]"
             >
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="shrink-0 whitespace-nowrap rounded-full bg-[#F0FDFA] px-2 py-0.5 text-[11px] font-semibold text-[#0F766E] tabular-nums dark:bg-[#0F2928] dark:text-[#2DD4BF]">
-                  فصل {activeLesson.chapterNumber} از {lessons.length}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F172A] dark:text-[#F1F5F9]">
-                  {activeLesson.title}
-                </span>
+                {activeLesson ? (
+                  <>
+                    <span className="shrink-0 whitespace-nowrap rounded-full bg-[#F0FDFA] px-2 py-0.5 text-[11px] font-semibold text-[#0F766E] tabular-nums dark:bg-[#0F2928] dark:text-[#2DD4BF]">
+                      فصل {activeLesson.chapterNumber} از {lessons.length}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F172A] dark:text-[#F1F5F9]">
+                      {activeLesson.title}
+                    </span>
+                  </>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-[#64748B] dark:text-[#94A3B8]">
+                    هنوز درسی ایجاد نشده — برای افزودن کلیک کنید
+                  </span>
+                )}
               </div>
               <ChevronDown
                 className={`h-4 w-4 shrink-0 text-[#64748B] transition-transform duration-150 ${
@@ -442,7 +456,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="mx-auto hidden max-w-[1440px] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 py-2.5 md:flex lg:px-8 xl:h-[60px] xl:flex-nowrap xl:px-10 xl:py-0">
         {/* Right-aligned (RTL Start): Tablet Menu + Brand + Lesson Selector Dropdown */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5 xl:flex-initial">
-          {workspaceMode === 'notes' && (
+          {workspaceMode === 'notes' && activeLesson && (
             <button
               type="button"
               onClick={onOpenMobileSyllabus}
@@ -467,12 +481,20 @@ export const Header: React.FC<HeaderProps> = ({
               aria-expanded={dropdownOpen}
               className="flex h-10 w-full max-w-[320px] min-w-0 items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 text-right transition-all duration-150 hover:border-[#CBD5E1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D9488]/40 dark:border-[#27323E] dark:bg-[#1C252E] dark:hover:border-[#364554] xl:w-auto xl:max-w-[235px] 2xl:max-w-[285px]"
             >
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-[#F0FDFA] px-2 py-0.5 text-[11px] font-semibold text-[#0F766E] tabular-nums dark:bg-[#0F2928] dark:text-[#2DD4BF]">
-                فصل {activeLesson.chapterNumber} از {lessons.length}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F172A] dark:text-[#F1F5F9]">
-                {activeLesson.title}
-              </span>
+              {activeLesson ? (
+                <>
+                  <span className="shrink-0 whitespace-nowrap rounded-full bg-[#F0FDFA] px-2 py-0.5 text-[11px] font-semibold text-[#0F766E] tabular-nums dark:bg-[#0F2928] dark:text-[#2DD4BF]">
+                    فصل {activeLesson.chapterNumber} از {lessons.length}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F172A] dark:text-[#F1F5F9]">
+                    {activeLesson.title}
+                  </span>
+                </>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-[#64748B] dark:text-[#94A3B8]">
+                  بدون درس (ایجاد درس جدید)
+                </span>
+              )}
               <ChevronDown
                 className={`h-4 w-4 shrink-0 text-[#64748B] transition-transform duration-150 ${
                   dropdownOpen ? 'rotate-180' : ''
@@ -569,7 +591,7 @@ export const Header: React.FC<HeaderProps> = ({
             {themeMenuOpen && renderThemePopover()}
           </div>
 
-          {workspaceMode !== 'resources' && (
+          {workspaceMode !== 'resources' && activeLesson && (
             <button
               type="button"
               onClick={handlePrint}

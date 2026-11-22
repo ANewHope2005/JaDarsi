@@ -1,8 +1,10 @@
-﻿/* Local fonts - no external font requests */
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+/* Local fonts - no external font requests */
 
 @font-face {
   font-family: 'Vazirmatn';
-  src: url('/fonts/Vazirmatn-Persian.woff2') format('woff2');
+  src: url('/JaDarsi/fonts/Vazirmatn-Persian.woff2') format('woff2');
   font-style: normal;
   font-weight: 300 800;
   font-display: swap;
@@ -11,7 +13,7 @@
 
 @font-face {
   font-family: 'Vazirmatn';
-  src: url('/fonts/Vazirmatn-Latin.woff2') format('woff2');
+  src: url('/JaDarsi/fonts/Vazirmatn-Latin.woff2') format('woff2');
   font-style: normal;
   font-weight: 300 800;
   font-display: swap;
@@ -20,7 +22,7 @@
 
 @font-face {
   font-family: 'Bricolage Grotesque';
-  src: url('/fonts/BricolageGrotesque-Latin.woff2') format('woff2');
+  src: url('/JaDarsi/fonts/BricolageGrotesque-Latin.woff2') format('woff2');
   font-style: normal;
   font-weight: 500 700;
   font-display: swap;
@@ -28,7 +30,7 @@
 
 @font-face {
   font-family: 'IBM Plex Mono';
-  src: url('/fonts/IBMPlexMono-400.woff2') format('woff2');
+  src: url('/JaDarsi/fonts/IBMPlexMono-400.woff2') format('woff2');
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -36,7 +38,7 @@
 
 @font-face {
   font-family: 'IBM Plex Mono';
-  src: url('/fonts/IBMPlexMono-500.woff2') format('woff2');
+  src: url('/JaDarsi/fonts/IBMPlexMono-500.woff2') format('woff2');
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -44,7 +46,7 @@
 
 @font-face {
   font-family: 'IBM Plex Mono';
-  src: url('/fonts/IBMPlexMono-600.woff2') format('woff2');
+  src: url('/JaDarsi/fonts/IBMPlexMono-600.woff2') format('woff2');
   font-style: normal;
   font-weight: 600;
   font-display: swap;
@@ -52,14 +54,11 @@
 
 @font-face {
   font-family: 'IBM Plex Mono';
-  src: url('/fonts/IBMPlexMono-700.woff2') format('woff2');
+  src: url('/JaDarsi/fonts/IBMPlexMono-700.woff2') format('woff2');
   font-style: normal;
   font-weight: 700;
   font-display: swap;
 }
-
-@import "tailwindcss";
-@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
@@ -286,4 +285,3 @@ mark.study-highlight-formula-block {
     scroll-behavior: auto !important;
   }
 }
-
