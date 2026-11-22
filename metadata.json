@@ -1,0 +1,6 @@
+{
+  "name": "آرشیو دانش — محیط مطالعه و پژوهش دانشگاهی",
+  "description": "محیط مطالعاتی و دانش‌نگاری فارسی با طراحی آرشیوی برای مطالعه جزوه‌های علمی، مایندمپ تعاملی، فلش‌کارت مرور هوشمند و آزمون تستی.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

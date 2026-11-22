@@ -1,0 +1,247 @@
+---
+name: Archival Scholar
+colors:
+  surface: '#f8f9fb'
+  surface-dim: '#d9dadc'
+  surface-bright: '#f8f9fb'
+  surface-container-lowest: '#ffffff'
+  surface-container-low: '#f3f4f6'
+  surface-container: '#edeef0'
+  surface-container-high: '#e7e8ea'
+  surface-container-highest: '#e1e2e4'
+  on-surface: '#191c1e'
+  on-surface-variant: '#3d4947'
+  inverse-surface: '#2e3132'
+  inverse-on-surface: '#f0f1f3'
+  outline: '#6d7a77'
+  outline-variant: '#bcc9c6'
+  surface-tint: '#006a61'
+  primary: '#00685f'
+  on-primary: '#ffffff'
+  primary-container: '#008378'
+  on-primary-container: '#f4fffc'
+  inverse-primary: '#6bd8cb'
+  secondary: '#545f73'
+  on-secondary: '#ffffff'
+  secondary-container: '#d5e0f8'
+  on-secondary-container: '#586377'
+  tertiary: '#8d4b00'
+  on-tertiary: '#ffffff'
+  tertiary-container: '#b15f00'
+  on-tertiary-container: '#fffbff'
+  error: '#ba1a1a'
+  on-error: '#ffffff'
+  error-container: '#ffdad6'
+  on-error-container: '#93000a'
+  primary-fixed: '#89f5e7'
+  primary-fixed-dim: '#6bd8cb'
+  on-primary-fixed: '#00201d'
+  on-primary-fixed-variant: '#005049'
+  secondary-fixed: '#d8e3fb'
+  secondary-fixed-dim: '#bcc7de'
+  on-secondary-fixed: '#111c2d'
+  on-secondary-fixed-variant: '#3c475a'
+  tertiary-fixed: '#ffdcc3'
+  tertiary-fixed-dim: '#ffb77d'
+  on-tertiary-fixed: '#2f1500'
+  on-tertiary-fixed-variant: '#6e3900'
+  background: '#f8f9fb'
+  on-background: '#191c1e'
+  surface-variant: '#e1e2e4'
+typography:
+  headline-xl:
+    fontFamily: Bricolage Grotesque, Vazirmatn, sans-serif
+    fontSize: 2.25rem
+    fontWeight: '700'
+    lineHeight: 3rem
+    letterSpacing: -0.02em
+  headline-xl-mobile:
+    fontFamily: Bricolage Grotesque, Vazirmatn, sans-serif
+    fontSize: 1.75rem
+    fontWeight: '700'
+    lineHeight: 2.5rem
+    letterSpacing: -0.01em
+  headline-lg:
+    fontFamily: Bricolage Grotesque, Vazirmatn, sans-serif
+    fontSize: 1.875rem
+    fontWeight: '600'
+    lineHeight: 2.75rem
+    letterSpacing: -0.015em
+  headline-lg-mobile:
+    fontFamily: Bricolage Grotesque, Vazirmatn, sans-serif
+    fontSize: 1.5rem
+    fontWeight: '600'
+    lineHeight: 2.25rem
+  headline-md:
+    fontFamily: Bricolage Grotesque, Vazirmatn, sans-serif
+    fontSize: 1.5rem
+    fontWeight: '600'
+    lineHeight: 2.25rem
+  headline-sm:
+    fontFamily: Bricolage Grotesque, Vazirmatn, sans-serif
+    fontSize: 1.25rem
+    fontWeight: '600'
+    lineHeight: 2rem
+  body-lg:
+    fontFamily: Geist, Vazirmatn, sans-serif
+    fontSize: 1.125rem
+    fontWeight: '400'
+    lineHeight: 2.125rem
+  body-md:
+    fontFamily: Geist, Vazirmatn, sans-serif
+    fontSize: 1rem
+    fontWeight: '400'
+    lineHeight: 1.875rem
+  body-sm:
+    fontFamily: Geist, Vazirmatn, sans-serif
+    fontSize: 0.875rem
+    fontWeight: '400'
+    lineHeight: 1.625rem
+  label-md:
+    fontFamily: Geist, Vazirmatn, sans-serif
+    fontSize: 0.875rem
+    fontWeight: '500'
+    lineHeight: 1.25rem
+  label-sm:
+    fontFamily: Geist, Vazirmatn, sans-serif
+    fontSize: 0.75rem
+    fontWeight: '500'
+    lineHeight: 1rem
+    letterSpacing: 0.02em
+  code:
+    fontFamily: Geist, monospace
+    fontSize: 0.875rem
+    fontWeight: '400'
+    lineHeight: 1.5rem
+rounded:
+  sm: 0.25rem
+  DEFAULT: 0.5rem
+  md: 0.75rem
+  lg: 1rem
+  xl: 1.5rem
+  full: 9999px
+spacing:
+  gutter: 1.25rem
+  gutter-desktop: 1.5rem
+  margin: 1rem
+  margin-tablet: 1.5rem
+  margin-desktop: 2.5rem
+  space-xs: 0.25rem
+  space-sm: 0.5rem
+  space-md: 1rem
+  space-lg: 1.5rem
+  space-xl: 2.25rem
+---
+
+## Brand & Style
+
+This design system establishes an archival, distraction-free digital knowledge environment tailored for deep academic inquiry, technical self-study, and rigorous note synthesis with native Right-to-Left (RTL) ergonomics. Blending the structural clarity of an Obsidian-style personal knowledge base with the warm physical feel of archival paper and technical drafting tables, the design balances mathematical precision with organic cognitive comfort.
+
+### Target Audience & Emotional Impact
+Designed for Persian-language university students, STEM researchers, and lifelong learners navigating complex curricula. The interface prioritizes prolonged visual endurance, cognitive stillness, and total agency over dense learning materials. Every surface minimizes glare, eliminates unnecessary decoration, and affords effortless bi-directional reading across Persian scripts and LTR scientific notation.
+
+### Design Movement & Aesthetic Pillars
+- **Archival Minimalism:** Grounded in soft paper tones, crisp architectural hairline dividers, and deliberate whitespace rather than heavy containers.
+- **Mathematical Tactility:** Structural modules feel distinctly physical yet understated—utilizing 8px baseline metrics, quiet borders, and balanced 0.5rem radii that recall archival index cards and precision drafting notebooks.
+- **Bi-Directional Clarity:** Native RTL layout hierarchy seamlessly integrating isolated LTR modules (LaTeX formulas, terminal code blocks, chemical notation) without breaking cognitive flow.
+
+## Colors
+
+The color palette prioritizes optical ease and long-session legibility, drawing on deep Persian teal, archival paper tones, and technical slate inks.
+
+### Palette Architecture
+- **Primary (`#0D9488`):** Deep Persian Teal anchors focal points, active workspace segmented tabs, progress indicators, and primary action affordances.
+- **Secondary (`#1E293B`):** Deep Charcoal/Slate serves as the primary typographic ink and structural frame, establishing unwavering contrast against paper backgrounds.
+- **Tertiary (`#D97706`):** Warm Amber highlights items flagged for review, spaced-repetition intervals, and secondary pedagogical annotations.
+- **Neutral Canvas (`#F4F5F7` with `#FAF9F6` reading surfaces):** Off-white archival tones that temper screen luminescence and eliminate eye strain.
+
+### Functional Accents & Semantic Signals
+- **Surface Elevation:** Base canvas sits at `#F4F5F7`. Active reading sheets and cards sit at `#FAF9F6` or pure `#FFFFFF`, framed with delicate borders in `#E2E8F0` and `#CBD5E1`.
+- **Text Hierarchies:** Deep Slate (`#0F172A` / `#1E293B`) for body copy; Muted Slate (`#64748B`) for metadata, line counters, and contextual hints; Disabled Slate (`#94A3B8`).
+- **Semantic Academic Signals:**
+  - *Correct / Mastery:* Subdued Emerald (`#059669` / Surface `#ECFDF5`).
+  - *Incorrect / Gap:* Subdued Crimson (`#DC2626` / Surface `#FEF2F2`).
+  - *Review / Warning:* Soft Amber (`#D97706` / Surface `#FFFBEB`).
+  - *Mathematical / LTR Context:* Deep Persian Teal Tint (`#F0FDFA`).
+
+## Typography
+
+The typographic hierarchy is calibrated specifically for long-form Persian reading comfort paired with rigorous LTR technical data.
+
+### Typographic Ratios & Font Rules
+- **Headline Expression (`Bricolage Grotesque` / `Vazirmatn`):** Headlines display structured personality with tight glyph metrics and robust ink-traps that maintain visual authority in both Latin digits and Persian script forms.
+- **Body & Notation (`Geist` / `Vazirmatn`):** Body typography demands a relaxed vertical rhythm (line heights between 1.85× and 2.1×) to accommodate Persian ascenders and descenders without clipping or visual crowdedness.
+- **Bidirectional Isolation (`dir="ltr"` / `unicode-bidi: isolate`):** All inline math, LaTeX blocks, code strings, chemical notation, and keyboard shortcuts (`Cmd/Ctrl+K`) are explicitly isolated to LTR alignment. Digits in strictly technical or tabular data contexts default to tabular figures.
+
+## Layout & Spacing
+
+The layout philosophy mirrors an academic workbench: clean modularity, collapsible sidebars, and an unencumbered focal document column.
+
+### Grid & Canvas Structure
+- **Global Layout:** A 12-column responsive fluid grid pinned to an optimal reading column max-width of `760px` for prose and study decks, expanding up to `1440px` for multi-pane split views (e.g., Note editor alongside Mindmap canvas).
+- **Navigation Rails:** The header maintains a fixed `60px` height with minimal horizontal padding, anchoring workspace mode tabs cleanly centered or right-aligned to RTL reading flow.
+- **Breakpoints:**
+  - *Mobile (< 768px):* Single column layout. Canvas margin `1rem`, gutters `1.25rem`. Drawers and study menus transition to full-width bottom sheets.
+  - *Tablet (768px - 1024px):* Collapsible secondary outline / Table of Contents rail (`240px`). Canvas margin `1.5rem`.
+  - *Desktop (> 1024px):* Three-column academic layout: contextual syllabus navigation (`280px` right-pinned in RTL), focal reading pane (`760px`), and floating index / metadata rail (`260px` left-pinned). Margin `2.5rem`.
+
+## Elevation & Depth
+
+Visual hierarchy relies on archival surface tiers, subtle hairline boundaries, and low-opacity slate ambient diffusion rather than heavy physical drops.
+
+### Surface Tiers
+- **Tier 0 (Global Desk):** Archival light gray `#F4F5F7`, completely flat.
+- **Tier 1 (Document Sheets & Workspace Tiles):** Warm paper white `#FAF9F6` or pure `#FFFFFF`, bounded by a subtle `1px` border in `#E2E8F0`. No shadow in idle state.
+- **Tier 2 (Interactive Modules & Hovered Cards):** Hairline border `#CBD5E1` accompanied by a gentle ambient slate lift: `box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03)`.
+- **Tier 3 (Active Overlays, Modals, Floating Flashcard Deck):** Tinted border `#94A3B8` with an extended diffuse shadow: `box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.08), 0 4px 8px -2px rgba(15, 23, 42, 0.04)`.
+
+## Shapes
+
+The design system employs a roundedness index of `2` (`0.5rem` base border radius). This curvature provides a comfortable tactile quality while retaining the disciplined geometry of scientific index cards and physical bound notebooks.
+
+### Radius Scale Implementation
+- **Base Components (`rounded` / 0.5rem):** Buttons, inputs, flashcard action toggles, callout containers, and segmented control chips.
+- **Surface Panels (`rounded-lg` / 1rem):** Article main cards, knowledge graph tree node cards, and modal sheets.
+- **Study Decks (`rounded-xl` / 1.5rem):** Centerpiece tactile flashcards, reinforcing their physical index-card metaphor.
+- **Pill Elements:** Badge indicators, reading progress capsules, and status tags (`rounded-full`).
+
+## Components
+
+### Top Application Header
+- **Layout:** Thin, persistent bar (`60px` height) with `#FAF9F6` background and `#E2E8F0` bottom border.
+- **Elements:** Right-aligned lesson selector dropdown with module counter badge; center-aligned segmented mode switcher; left-aligned action tray featuring reading controls (font scaling `A- / A+`, night mode toggle) and PDF export / file drawer triggers.
+
+### Segmented Workspace Tabs
+- **Structure:** Encased in a shallow container (`#E2E8F0`, `p-1`, `rounded-lg`).
+- **Items:** Equal-width segments ("جزوه", "مایندمپ", "فلش‌کارت", "آزمون تستی").
+- **States:** Active tab transitions with a crisp surface `#FFFFFF`, border `#CBD5E1`, text `#0D9488`, and font weight `600`. Inactive tabs render in `#64748B` with hover text `#1E293B`.
+
+### Rich Article Callout Boxes
+- **Structure:** `rounded-lg` container with a distinct `4px` start border (RTL right-side border) and soft tinted background.
+- **Key Variants:**
+  - *نکته مهم (Important Note):* Primary Teal accent (`border-r-[#0D9488]`, `bg-[#F0FDFA]`, label `#0F766E`).
+  - *مثال کاربردی (Practical Example):* Slate accent (`border-r-[#475569]`, `bg-[#F8FAFC]`, label `#334155`).
+  - *فرمول کلیدی (Key Formula):* LTR-oriented inner container (`dir="ltr"`, `border-r-[#0D9488]`, `bg-[#F0FDFA]`, monospace Geist font with tabular figures).
+
+### Interactive Tree Node Cards (Mindmap / Outline)
+- **Visuals:** `#FFFFFF` background, `1px` border `#E2E8F0`, `rounded-md`, `p-3`.
+- **Interactivity:** Subtle chevron at the RTL trailing edge for collapse/expand states. Hover brings `#CBD5E1` border and a muted teal highlight badge indicating sub-concept count.
+
+### Large Tactile Flashcard Study Deck
+- **Card Body:** `rounded-xl` card (`min-height: 380px`), archival background `#FAF9F6`, `1px` solid `#CBD5E1` with Tier 3 elevation.
+- **Flip Affordance:** Subtle top corner indicator with tap or spacebar shortcut cues. Center-aligned question and answer text rendered in `headline-md` and `body-lg`.
+- **Review Action Bar:** Pinned to bottom of the card view with two primary tactile buttons:
+  - *نیاز به مرور (Needs Review):* Surface `#FFFBEB`, border `#FCD34D`, text `#B45309`.
+  - *بلدم (Mastered):* Surface `#ECFDF5`, border `#6EE7B7`, text `#047857`.
+- **Auxiliary Controls:** Segmented top header housing progress bar (`h-1.5`, fill `#0D9488`), shuffle toggle switch, and remaining card tally.
+
+### Quiz Interface
+- **Question Container:** Clear question stem followed by stacked response options.
+- **Single-Choice Radio:** Custom `20px` circle with `2px` stroke (`#CBD5E1`). Checked state renders an inner `#0D9488` dot with `#F0FDFA` radio card fill.
+- **Multi-Select Checkbox:** Custom `20px` square with `0.25rem` radius. Selected state displays `#0D9488` solid fill with white checkmark.
+- **Instant Feedback Mode:** Immediate card surface tint on selection (`#ECFDF5` for correct, `#FEF2F2` for incorrect) paired with a collapsible Persian explanation drawer.
+- **Exam Mode:** Neutral persistent selection highlight (`#F1F5F9` background, `#0D9488` border) with progress drawer and flag-for-review toggle.
+
+### Form Inputs & Text Fields
+- **Styling:** Height `42px`, padding horizontal `0.875rem`, `rounded` (`0.5rem`), background `#FFFFFF`, border `1px solid #CBD5E1`.
+- **Focus:** Crisp outline in `#0D9488` with `0 0 0 3px rgba(13, 148, 136, 0.15)`. RTL text orientation with correct bidirectional cursor behavior.
