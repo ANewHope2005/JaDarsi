@@ -276,115 +276,490 @@ const AtomicFormula: React.FC<AtomicFormulaProps> = ({
   return inlineEl;
 };
 
-interface MathSegment {
-  type: 'text' | 'inline-math' | 'display-math';
-  value: string;
-}
-
-function tokenizeMath(input: string): MathSegment[] {
-  const segments: MathSegment[] = [];
-  const pattern =
-    /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|(?<!\\)\$(?!\$)((?:\\\$|[^$\n])+?)(?<!\\)\$/g;
-
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(input)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push({
-        type: 'text',
-        value: input.slice(lastIndex, match.index).replace(/\\\$/g, '$'),
-      });
-    }
-
-    if (match[1] !== undefined || match[2] !== undefined) {
-      segments.push({
-        type: 'display-math',
-        value: (match[1] ?? match[2] ?? '').trim(),
-      });
-    } else if (match[3] !== undefined || match[4] !== undefined) {
-      segments.push({
-        type: 'inline-math',
-        value: (match[3] ?? match[4] ?? '').trim(),
-      });
-    }
-
-    lastIndex = pattern.lastIndex;
-  }
-
-  if (lastIndex < input.length) {
-    segments.push({
-      type: 'text',
-      value: input.slice(lastIndex).replace(/\\\$/g, '$'),
-    });
-  }
-
-  return segments;
-}
-
 const PLAIN_INLINE_MATH_REGEX =
   /(?:[ΔΩΣΘησλδ][A-Za-z]?|[A-Za-z])(?:_[A-Za-z0-9]+)+(?:\^[A-Za-z0-9()]+|[⁰¹²³⁴⁵⁶⁷⁸⁹ᵀ]+)?|[A-Za-z0-9]+\^(?:\([^)]+\)|[A-Za-z0-9_]+)|[A-Za-zΔΩΣΘησλδ][⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺ᵀ]+[A-Za-z]?|[A-Za-zΔΩΣΘησλδ][₀₁₂₃₄₅₆₇₈₉]+/g;
 
-function applyHighlightsToPlainText(
-  text: string,
-  highlights: TextHighlight[],
-  sectionId: string | undefined,
-  onClickHighlight: (hl: TextHighlight, rect: DOMRect) => void,
-  keyPrefix: string
-): React.ReactNode {
-  if (!highlights || highlights.length === 0 || !text) {
-    return text;
+/* ============================================================================
+ * Recursive Inline AST Parser (Markdown bold/italic/code + LaTeX + Scientific)
+ * Handles **Saccharomyces cerevisiae:**, nested *italic*, inline $LaTeX$, etc.
+ * ==========================================================================*/
+type InlineAstNode =
+  | { type: 'text'; value: string }
+  | { type: 'strong'; children: InlineAstNode[] }
+  | { type: 'em'; children: InlineAstNode[] }
+  | { type: 'code'; value: string }
+  | { type: 'inline-math'; value: string }
+  | { type: 'display-math'; value: string }
+  | { type: 'sci-math'; value: string };
+
+/**
+ * Finds the matching closing delimiter (`***`, `**`, `__`, or `*`) starting at
+ * `fromIndex`, safely skipping over escaped characters, inline code spans, and
+ * `$...$` / `$$...$$` / `\(...\)` / `\[...\]` LaTeX expressions.
+ */
+function findClosingMarkdownDelimiter(
+  input: string,
+  fromIndex: number,
+  delim: '***' | '**' | '__' | '*'
+): number {
+  let i = fromIndex;
+  let singleStarCount = 0;
+
+  while (i < input.length) {
+    const ch = input[i];
+
+    // Skip escaped char
+    if (ch === '\\' && i + 1 < input.length) {
+      // Skip \( ... \) and \[ ... \]
+      if (input[i + 1] === '(') {
+        const end = input.indexOf('\\)', i + 2);
+        if (end !== -1) {
+          i = end + 2;
+          continue;
+        }
+      }
+      if (input[i + 1] === '[') {
+        const end = input.indexOf('\\]', i + 2);
+        if (end !== -1) {
+          i = end + 2;
+          continue;
+        }
+      }
+      i += 2;
+      continue;
+    }
+
+    // Skip inline code span `...`
+    if (ch === '`') {
+      const end = input.indexOf('`', i + 1);
+      if (end !== -1) {
+        i = end + 1;
+        continue;
+      }
+    }
+
+    // Skip display/inline LaTeX $...$ or $$...$$
+    if (ch === '$') {
+      if (input[i + 1] === '$') {
+        const end = input.indexOf('$$', i + 2);
+        if (end !== -1) {
+          i = end + 2;
+          continue;
+        }
+      } else {
+        let j = i + 1;
+        while (j < input.length && input[j] !== '\n') {
+          if (input[j] === '\\') {
+            j += 2;
+            continue;
+          }
+          if (input[j] === '$') {
+            i = j + 1;
+            j = -1;
+            break;
+          }
+          j++;
+        }
+        if (j === -1) continue;
+      }
+    }
+
+    if (delim === '***') {
+      if (input.startsWith('***', i) && i > fromIndex) {
+        return i;
+      }
+      i++;
+      continue;
+    }
+
+    if (delim === '**') {
+      if (input.startsWith('***', i) && i > fromIndex) {
+        // If there is an unclosed single `*` inside the bold span, let the first `*`
+        // close the inner italic and the following `**` close the outer bold.
+        if (singleStarCount % 2 === 1) {
+          return i + 1;
+        }
+        return i;
+      }
+      if (input.startsWith('**', i) && i > fromIndex) {
+        return i;
+      }
+      if (ch === '*') {
+        singleStarCount++;
+      }
+      i++;
+      continue;
+    }
+
+    if (delim === '__') {
+      if (input.startsWith('__', i) && i > fromIndex) {
+        return i;
+      }
+      i++;
+      continue;
+    }
+
+    // Single `*` italic delimiter: skip `**` pairs
+    if (ch === '*') {
+      if (input[i + 1] === '*') {
+        i += 2;
+        continue;
+      }
+      if (i > fromIndex) {
+        return i;
+      }
+    }
+
+    i++;
   }
 
-  // Gather all text anchor needles belonging to highlights in this section scope
+  return -1;
+}
+
+function splitPlainTextWithScientific(text: string): InlineAstNode[] {
+  if (!text) return [];
+  const nodes: InlineAstNode[] = [];
+  let last = 0;
+  PLAIN_INLINE_MATH_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = PLAIN_INLINE_MATH_REGEX.exec(text)) !== null) {
+    const token = match[0];
+    const prevChar = match.index > 0 ? text[match.index - 1] : '';
+    const nextChar = text[match.index + token.length] ?? '';
+    const isPartOfLongWord = /[A-Za-z0-9]/.test(prevChar) || /[A-Za-z]/.test(nextChar);
+    if (isPartOfLongWord) continue;
+
+    if (match.index > last) {
+      nodes.push({ type: 'text', value: text.slice(last, match.index) });
+    }
+    nodes.push({ type: 'sci-math', value: token });
+    last = match.index + token.length;
+  }
+
+  if (last < text.length) {
+    nodes.push({ type: 'text', value: text.slice(last) });
+  }
+
+  return nodes;
+}
+
+function parseInlineAst(input: string, allowMarkdown: boolean): InlineAstNode[] {
+  const nodes: InlineAstNode[] = [];
+  let textBuf = '';
+  let i = 0;
+
+  const flushText = () => {
+    if (!textBuf) return;
+    nodes.push(...splitPlainTextWithScientific(textBuf));
+    textBuf = '';
+  };
+
+  while (i < input.length) {
+    const ch = input[i];
+
+    // Escaped delimiters: \$, \*, \`, \_
+    if (ch === '\\' && i + 1 < input.length) {
+      const next = input[i + 1];
+      if (next === '$' || next === '*' || next === '`' || next === '_') {
+        textBuf += next;
+        i += 2;
+        continue;
+      }
+      // Display math \[ ... \]
+      if (next === '[') {
+        const end = input.indexOf('\\]', i + 2);
+        if (end !== -1) {
+          flushText();
+          nodes.push({ type: 'display-math', value: input.slice(i + 2, end).trim() });
+          i = end + 2;
+          continue;
+        }
+      }
+      // Inline math \( ... \)
+      if (next === '(') {
+        const end = input.indexOf('\\)', i + 2);
+        if (end !== -1) {
+          flushText();
+          nodes.push({ type: 'inline-math', value: input.slice(i + 2, end).trim() });
+          i = end + 2;
+          continue;
+        }
+      }
+    }
+
+    // Display math $$ ... $$
+    if (ch === '$' && input[i + 1] === '$') {
+      const end = input.indexOf('$$', i + 2);
+      if (end !== -1 && end > i + 2) {
+        flushText();
+        nodes.push({ type: 'display-math', value: input.slice(i + 2, end).trim() });
+        i = end + 2;
+        continue;
+      }
+    }
+
+    // Inline math $ ... $ (single line, non-empty)
+    if (ch === '$' && input[i + 1] !== '$') {
+      let j = i + 1;
+      let found = -1;
+      while (j < input.length && input[j] !== '\n') {
+        if (input[j] === '\\') {
+          j += 2;
+          continue;
+        }
+        if (input[j] === '$') {
+          found = j;
+          break;
+        }
+        j++;
+      }
+      if (found !== -1 && found > i + 1) {
+        const inner = input.slice(i + 1, found).trim();
+        if (inner.length > 0) {
+          flushText();
+          nodes.push({ type: 'inline-math', value: inner });
+          i = found + 1;
+          continue;
+        }
+      }
+    }
+
+    if (allowMarkdown) {
+      // Inline code `...`
+      if (ch === '`') {
+        const end = input.indexOf('`', i + 1);
+        if (end !== -1 && end > i + 1) {
+          flushText();
+          nodes.push({ type: 'code', value: input.slice(i + 1, end) });
+          i = end + 1;
+          continue;
+        }
+      }
+
+      // Bold + Italic ***...***
+      if (input.startsWith('***', i)) {
+        const end = findClosingMarkdownDelimiter(input, i + 3, '***');
+        if (end !== -1) {
+          const inner = input.slice(i + 3, end);
+          if (inner.trim().length > 0) {
+            flushText();
+            nodes.push({
+              type: 'strong',
+              children: [{ type: 'em', children: parseInlineAst(inner, true) }],
+            });
+            i = end + 3;
+            continue;
+          }
+        }
+      }
+
+      // Bold **...** (works seamlessly next to colons, parentheses, Latin terms, Persian text)
+      if (input.startsWith('**', i)) {
+        const end = findClosingMarkdownDelimiter(input, i + 2, '**');
+        if (end !== -1) {
+          const inner = input.slice(i + 2, end);
+          if (inner.trim().length > 0) {
+            flushText();
+            nodes.push({
+              type: 'strong',
+              children: parseInlineAst(inner, true),
+            });
+            i = end + 2;
+            continue;
+          }
+        }
+      }
+
+      // Alternate bold __...__ (only when not mid-word)
+      if (input.startsWith('__', i)) {
+        const prev = i > 0 ? input[i - 1] : '';
+        if (!/[A-Za-z0-9]/.test(prev)) {
+          const end = findClosingMarkdownDelimiter(input, i + 2, '__');
+          if (end !== -1) {
+            const after = input[end + 2] ?? '';
+            const inner = input.slice(i + 2, end);
+            if (!/[A-Za-z0-9]/.test(after) && inner.trim().length > 0) {
+              flushText();
+              nodes.push({
+                type: 'strong',
+                children: parseInlineAst(inner, true),
+              });
+              i = end + 2;
+              continue;
+            }
+          }
+        }
+      }
+
+      // Italic *...* (avoid matching standalone multiplication `a * b`)
+      if (ch === '*' && input[i + 1] !== '*' && input[i + 1] !== ' ') {
+        const end = findClosingMarkdownDelimiter(input, i + 1, '*');
+        if (end !== -1 && input[end - 1] !== ' ') {
+          const inner = input.slice(i + 1, end);
+          if (inner.trim().length > 0) {
+            flushText();
+            nodes.push({
+              type: 'em',
+              children: parseInlineAst(inner, true),
+            });
+            i = end + 1;
+            continue;
+          }
+        }
+      }
+    }
+
+    textBuf += ch;
+    i++;
+  }
+
+  flushText();
+  return nodes;
+}
+
+/**
+ * Strips inline Markdown emphasis syntax (`**...**`, `***...***`, `*...*`, `` `...` ``)
+ * for clean plain-text previews in TOC items and search result snippets.
+ */
+export function stripInlineMarkdown(text: string): string {
+  if (!text) return '';
+  const ast = parseInlineAst(text, true);
+  const flatten = (list: InlineAstNode[]): string =>
+    list
+      .map((node) => {
+        if (node.type === 'text' || node.type === 'code' || node.type === 'sci-math') {
+          return node.value;
+        }
+        if (node.type === 'inline-math' || node.type === 'display-math') {
+          return node.value;
+        }
+        return flatten(node.children);
+      })
+      .join('');
+  return flatten(ast);
+}
+
+/* ============================================================================
+ * Block-Level Unified Text-Stream Highlighting
+ * Matches anchors seamlessly across <strong>, <em>, and plain text boundaries
+ * ==========================================================================*/
+interface TextInterval {
+  start: number;
+  end: number;
+  hl: TextHighlight;
+}
+
+const FORMULA_SENTINEL = '\uE002';
+
+function normalizeWithIndexMap(raw: string): { norm: string; toOrig: number[] } {
+  let norm = '';
+  const toOrig: number[] = [];
+  let prevSpace = false;
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '\u00A0' || ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      if (!prevSpace) {
+        norm += ' ';
+        toOrig.push(i);
+        prevSpace = true;
+      }
+    } else {
+      norm += ch;
+      toOrig.push(i);
+      prevSpace = false;
+    }
+  }
+  toOrig.push(raw.length);
+  return { norm, toOrig };
+}
+
+function collectHighlightIntervals(
+  streamText: string,
+  highlights: TextHighlight[],
+  sectionId: string | undefined
+): TextInterval[] {
+  if (!highlights || highlights.length === 0 || !streamText) return [];
+
+  const { norm, toOrig } = normalizeWithIndexMap(streamText);
+
   const needleEntries: { needle: string; hl: TextHighlight }[] = [];
   for (const hl of highlights) {
     if (!isHighlightInScope(hl, sectionId)) continue;
     if (hl.anchors && hl.anchors.length > 0) {
       for (const anchor of hl.anchors) {
-        if (anchor.kind === 'text' && anchor.value.length >= 2 && text.includes(anchor.value)) {
-          needleEntries.push({ needle: anchor.value, hl });
+        if (anchor.kind === 'text') {
+          const clean = anchor.value.replace(/\s+/g, ' ').trim();
+          if (clean.length >= 2 && norm.includes(clean)) {
+            needleEntries.push({ needle: clean, hl });
+          }
         }
       }
-    } else if (hl.text.length >= 2 && text.includes(hl.text)) {
-      needleEntries.push({ needle: hl.text, hl });
+    } else {
+      const clean = hl.text.replace(/\s+/g, ' ').trim();
+      if (clean.length >= 2 && norm.includes(clean)) {
+        needleEntries.push({ needle: clean, hl });
+      }
     }
   }
 
-  if (needleEntries.length === 0) return text;
+  if (needleEntries.length === 0) return [];
 
   // Prefer longest matches first to avoid partial shadowing
   needleEntries.sort((a, b) => b.needle.length - a.needle.length);
 
-  const intervals: { start: number; end: number; hl: TextHighlight }[] = [];
+  const intervals: TextInterval[] = [];
   for (const { needle, hl } of needleEntries) {
     let searchFrom = 0;
-    while (searchFrom < text.length) {
-      const idx = text.indexOf(needle, searchFrom);
+    while (searchFrom < norm.length) {
+      const idx = norm.indexOf(needle, searchFrom);
       if (idx === -1) break;
-      const end = idx + needle.length;
-      const overlaps = intervals.some((iv) => !(end <= iv.start || idx >= iv.end));
-      if (!overlaps) {
-        intervals.push({ start: idx, end, hl });
+      const normEnd = idx + needle.length;
+      const origStart = toOrig[idx];
+      const origEnd = toOrig[normEnd];
+      const overlaps = intervals.some((iv) => !(origEnd <= iv.start || origStart >= iv.end));
+      if (!overlaps && origEnd > origStart) {
+        intervals.push({ start: origStart, end: origEnd, hl });
       }
-      searchFrom = end;
+      searchFrom = normEnd;
     }
   }
 
-  if (intervals.length === 0) return text;
   intervals.sort((a, b) => a.start - b.start);
+  return intervals;
+}
+
+function renderSlicedHighlightedLeaf(
+  value: string,
+  leafStart: number,
+  intervals: TextInterval[],
+  onClickHighlight: ((hl: TextHighlight, rect: DOMRect) => void) | undefined,
+  keyPrefix: string
+): React.ReactNode {
+  if (!onClickHighlight || intervals.length === 0 || !value) {
+    return value;
+  }
+
+  const leafEnd = leafStart + value.length;
+  const overlapping = intervals.filter((iv) => iv.end > leafStart && iv.start < leafEnd);
+  if (overlapping.length === 0) return value;
 
   const out: React.ReactNode[] = [];
   let cursor = 0;
 
-  intervals.forEach((iv, idx) => {
-    if (iv.start > cursor) {
+  overlapping.forEach((iv, idx) => {
+    const localStart = Math.max(0, iv.start - leafStart);
+    const localEnd = Math.min(value.length, iv.end - leafStart);
+
+    if (localStart > cursor) {
       out.push(
-        <React.Fragment key={`${keyPrefix}-pre-${idx}`}>
-          {text.slice(cursor, iv.start)}
+        <React.Fragment key={`${keyPrefix}-p-${idx}`}>
+          {value.slice(cursor, localStart)}
         </React.Fragment>
       );
     }
+
     out.push(
       <mark
         key={`${keyPrefix}-hl-${iv.hl.id}-${idx}`}
@@ -398,148 +773,17 @@ function applyHighlightsToPlainText(
         }}
         className={`study-highlight px-0.5 py-[1px] ${HIGHLIGHT_COLOR_CLASSES[iv.hl.color]}`}
       >
-        {text.slice(iv.start, iv.end)}
+        {value.slice(localStart, localEnd)}
       </mark>
     );
-    cursor = iv.end;
+    cursor = localEnd;
   });
 
-  if (cursor < text.length) {
-    out.push(<React.Fragment key={`${keyPrefix}-tail`}>{text.slice(cursor)}</React.Fragment>);
+  if (cursor < value.length) {
+    out.push(<React.Fragment key={`${keyPrefix}-tail`}>{value.slice(cursor)}</React.Fragment>);
   }
 
   return out;
-}
-
-function renderPlainSegmentWithScientificTokens(
-  text: string,
-  keyPrefix: string,
-  hlCtx: HighlightContextValue | null,
-  sectionId: string | undefined
-): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  let last = 0;
-  let idx = 0;
-  PLAIN_INLINE_MATH_REGEX.lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = PLAIN_INLINE_MATH_REGEX.exec(text)) !== null) {
-    const token = match[0];
-    const prevChar = match.index > 0 ? text[match.index - 1] : '';
-    const nextChar = text[match.index + token.length] ?? '';
-    const isPartOfLongWord = /[A-Za-z0-9]/.test(prevChar) || /[A-Za-z]/.test(nextChar);
-
-    if (isPartOfLongWord) continue;
-
-    if (match.index > last) {
-      const chunk = text.slice(last, match.index);
-      nodes.push(
-        <React.Fragment key={`${keyPrefix}-p-${idx++}`}>
-          {hlCtx
-            ? applyHighlightsToPlainText(
-                chunk,
-                hlCtx.highlights,
-                sectionId,
-                hlCtx.onClickHighlight,
-                `${keyPrefix}-h-${idx}`
-              )
-            : chunk}
-        </React.Fragment>
-      );
-    }
-
-    const tex = plainScientificToLatex(token);
-    nodes.push(
-      <AtomicFormula
-        key={`${keyPrefix}-sci-${idx++}`}
-        rawKey={token}
-        tex={tex}
-        displayMode={false}
-      />
-    );
-    last = match.index + token.length;
-  }
-
-  if (last < text.length) {
-    const tail = text.slice(last);
-    nodes.push(
-      <React.Fragment key={`${keyPrefix}-pe-${idx++}`}>
-        {hlCtx
-          ? applyHighlightsToPlainText(
-              tail,
-              hlCtx.highlights,
-              sectionId,
-              hlCtx.onClickHighlight,
-              `${keyPrefix}-he-${idx}`
-            )
-          : tail}
-      </React.Fragment>
-    );
-  }
-
-  return nodes;
-}
-
-function renderInlineFormatting(
-  text: string,
-  keyPrefix: string,
-  hlCtx: HighlightContextValue | null,
-  sectionId: string | undefined
-): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  const tokenRegex = /`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let idx = 0;
-
-  while ((m = tokenRegex.exec(text)) !== null) {
-    if (m.index > last) {
-      nodes.push(
-        ...renderPlainSegmentWithScientificTokens(
-          text.slice(last, m.index),
-          `${keyPrefix}-t-${idx++}`,
-          hlCtx,
-          sectionId
-        )
-      );
-    }
-    if (m[1] !== undefined) {
-      nodes.push(
-        <code
-          key={`${keyPrefix}-c-${idx++}`}
-          className="ltr-inline mx-0.5 rounded bg-[#E2E8F0]/70 px-1.5 py-0.5 font-mono text-[0.88em] text-[#0F766E] dark:bg-[#27323E] dark:text-[#5EEAD4]"
-        >
-          {m[1]}
-        </code>
-      );
-    } else if (m[2] !== undefined) {
-      nodes.push(
-        <strong key={`${keyPrefix}-b-${idx++}`} className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
-          {renderPlainSegmentWithScientificTokens(m[2], `${keyPrefix}-bs-${idx}`, hlCtx, sectionId)}
-        </strong>
-      );
-    } else if (m[3] !== undefined) {
-      nodes.push(
-        <em key={`${keyPrefix}-i-${idx++}`} className="italic">
-          {renderPlainSegmentWithScientificTokens(m[3], `${keyPrefix}-is-${idx}`, hlCtx, sectionId)}
-        </em>
-      );
-    }
-    last = tokenRegex.lastIndex;
-  }
-
-  if (last < text.length) {
-    nodes.push(
-      ...renderPlainSegmentWithScientificTokens(
-        text.slice(last),
-        `${keyPrefix}-e-${idx++}`,
-        hlCtx,
-        sectionId
-      )
-    );
-  }
-
-  return nodes;
 }
 
 interface RichMathTextProps {
@@ -550,7 +794,8 @@ interface RichMathTextProps {
 
 /**
  * Renders Persian RTL text seamlessly mixed with isolated LTR KaTeX inline/display formulas,
- * formatted plain-text scientific notation, and persisted text + atomic formula highlights.
+ * Markdown bold/italic/code, formatted plain-text scientific notation, and persisted text +
+ * atomic formula highlights (including highlights spanning across bold/italic/list items).
  */
 export const RichMathText: React.FC<RichMathTextProps> = ({
   text,
@@ -560,47 +805,97 @@ export const RichMathText: React.FC<RichMathTextProps> = ({
   const hlCtx = useContext(HighlightContext);
   const sectionId = useContext(SectionScopeContext);
   if (!text) return null;
-  const segments = tokenizeMath(text);
 
-  return (
-    <span className={className}>
-      {segments.map((seg, idx) => {
-        if (seg.type === 'display-math') {
+  const ast = parseInlineAst(text, inlineMarkdown);
+
+  // Build unified block text stream across plain text, <strong>, and <em> leaves
+  let streamText = '';
+  const leafOffsets = new Map<InlineAstNode, number>();
+  const walkStream = (nodes: InlineAstNode[]) => {
+    for (const node of nodes) {
+      if (node.type === 'text') {
+        leafOffsets.set(node, streamText.length);
+        streamText += node.value;
+      } else if (node.type === 'strong' || node.type === 'em') {
+        walkStream(node.children);
+      } else {
+        // Formula or code separates prose segments cleanly
+        streamText += FORMULA_SENTINEL;
+      }
+    }
+  };
+  walkStream(ast);
+
+  const intervals = hlCtx
+    ? collectHighlightIntervals(streamText, hlCtx.highlights, sectionId)
+    : [];
+
+  const renderAst = (nodes: InlineAstNode[], keyPrefix: string): React.ReactNode[] =>
+    nodes.map((node, idx) => {
+      const k = `${keyPrefix}-${idx}`;
+      switch (node.type) {
+        case 'text': {
+          const offset = leafOffsets.get(node) ?? 0;
+          return (
+            <React.Fragment key={k}>
+              {renderSlicedHighlightedLeaf(
+                node.value,
+                offset,
+                intervals,
+                hlCtx?.onClickHighlight,
+                k
+              )}
+            </React.Fragment>
+          );
+        }
+        case 'strong':
+          return (
+            <strong key={k} className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+              {renderAst(node.children, `${k}b`)}
+            </strong>
+          );
+        case 'em':
+          return (
+            <em key={k} className="italic">
+              {renderAst(node.children, `${k}i`)}
+            </em>
+          );
+        case 'code':
+          return (
+            <code
+              key={k}
+              className="ltr-inline mx-0.5 rounded bg-[#E2E8F0]/70 px-1.5 py-0.5 font-mono text-[0.88em] text-[#0F766E] dark:bg-[#27323E] dark:text-[#5EEAD4]"
+            >
+              {node.value}
+            </code>
+          );
+        case 'display-math':
           return (
             <span
-              key={idx}
+              key={k}
               className="my-3 block rounded-lg border border-[#0D9488]/20 bg-[#F0FDFA] px-4 py-3 text-[#0F172A] dark:border-[#14B8A6]/25 dark:bg-[#0F2928]/70 dark:text-[#F1F5F9]"
             >
               <AtomicFormula
-                rawKey={seg.value}
-                tex={plainScientificToLatex(seg.value)}
+                rawKey={node.value}
+                tex={plainScientificToLatex(node.value)}
                 displayMode={true}
               />
             </span>
           );
-        }
-        if (seg.type === 'inline-math') {
+        case 'inline-math':
+        case 'sci-math':
           return (
             <AtomicFormula
-              key={idx}
-              rawKey={seg.value}
-              tex={plainScientificToLatex(seg.value)}
+              key={k}
+              rawKey={node.value}
+              tex={plainScientificToLatex(node.value)}
               displayMode={false}
             />
           );
-        }
-        return inlineMarkdown ? (
-          <React.Fragment key={idx}>
-            {renderInlineFormatting(seg.value, `s${idx}`, hlCtx, sectionId)}
-          </React.Fragment>
-        ) : (
-          <React.Fragment key={idx}>
-            {renderPlainSegmentWithScientificTokens(seg.value, `sp${idx}`, hlCtx, sectionId)}
-          </React.Fragment>
-        );
-      })}
-    </span>
-  );
+      }
+    });
+
+  return <span className={className}>{renderAst(ast, 'n')}</span>;
 };
 
 interface FormulaDisplayProps {
@@ -684,6 +979,69 @@ function splitTableRow(line: string): string[] {
   return trimmed.split('|').map((cell) => cell.trim());
 }
 
+export interface MarkdownSubheading {
+  id: string;
+  title: string;
+}
+
+/**
+ * Extracts level-3 (`###`) subheadings from a section's Markdown body using the exact
+ * same code/math fence skipping rules as MarkdownContent so TOC IDs match DOM IDs 1:1.
+ */
+export function extractMarkdownSubheadings(
+  markdown: string | undefined,
+  sectionId: string
+): MarkdownSubheading[] {
+  if (!markdown) return [];
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const results: MarkdownSubheading[] = [];
+  let i = 0;
+  let subIdx = 0;
+
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) {
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('```')) {
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        i++;
+      }
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('$$') || trimmed.startsWith('\\[')) {
+      const closing = trimmed.startsWith('$$') ? '$$' : '\\]';
+      if (trimmed.length > 4 && trimmed.endsWith(closing)) {
+        i++;
+        continue;
+      }
+      i++;
+      while (i < lines.length && !lines[i].trim().endsWith(closing)) {
+        i++;
+      }
+      i++;
+      continue;
+    }
+
+    const match = trimmed.match(/^###\s+(.+)$/);
+    if (match) {
+      results.push({
+        id: `${sectionId}-sub-${subIdx}`,
+        title: stripInlineMarkdown(match[1].trim()),
+      });
+      subIdx++;
+    }
+    i++;
+  }
+
+  return results;
+}
+
 interface MarkdownContentProps {
   markdown: string;
 }
@@ -693,9 +1051,11 @@ interface MarkdownContentProps {
  * callout blockquotes, headings, lists, and LTR code blocks.
  */
 export const MarkdownContent: React.FC<MarkdownContentProps> = ({ markdown }) => {
+  const sectionId = useContext(SectionScopeContext);
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const blocks: React.ReactNode[] = [];
   let i = 0;
+  let subHeadingIdx = 0;
 
   while (i < lines.length) {
     const line = lines[i];
@@ -774,23 +1134,28 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ markdown }) =>
     if (headingMatch) {
       const level = headingMatch[1].length;
       const text = headingMatch[2].trim();
-      blocks.push(
-        level === 3 ? (
+      if (level === 3) {
+        const subId = sectionId ? `${sectionId}-sub-${subHeadingIdx}` : undefined;
+        subHeadingIdx++;
+        blocks.push(
           <h3
             key={`h3-${i}`}
-            className="mt-6 mb-2 text-lg font-semibold leading-8 text-[#0F172A] dark:text-[#F8FAFC]"
+            id={subId}
+            className="mt-6 mb-2 scroll-mt-28 text-lg font-semibold leading-8 text-[#0F172A] dark:text-[#F8FAFC]"
           >
             <RichMathText text={text} />
           </h3>
-        ) : (
+        );
+      } else {
+        blocks.push(
           <h4
             key={`h4-${i}`}
             className="mt-5 mb-2 text-base font-semibold leading-7 text-[#1E293B] dark:text-[#E2E8F0]"
           >
             <RichMathText text={text} />
           </h4>
-        )
-      );
+        );
+      }
       i++;
       continue;
     }
@@ -942,7 +1307,7 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({ markdown }) =>
 
     if (paraLines.length > 0) {
       blocks.push(
-        <p key={`p-${i}`} className="leading-[2.0] text-[#1E293B] dark:text-[#CBD5E1]">
+        <p key={`p-${i}`} className="lecture-paragraph leading-[2.0] text-[#1E293B] dark:text-[#CBD5E1]">
           <RichMathText text={paraLines.join(' ')} />
         </p>
       );

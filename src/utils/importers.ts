@@ -635,11 +635,11 @@ export function parseMindmapJson(rawText: string): ParsedMindmapImport {
   try {
     data = JSON.parse(stripBom(rawText));
   } catch {
-    throw new Error('ساختار JSON درخت دانش نامعتبر است.');
+    throw new Error('ساختار JSON مایندمپ نامعتبر است.');
   }
 
   if (!data || typeof data !== 'object') {
-    throw new Error('فایل JSON درخت دانش باید یک آبجکت معتبر باشد.');
+    throw new Error('فایل JSON مایندمپ باید یک آبجکت معتبر باشد.');
   }
 
   const rec = data as Record<string, unknown>;
@@ -679,7 +679,7 @@ export function parseMindmapJson(rawText: string): ParsedMindmapImport {
     if (Array.isArray(rec.knowledge_tree)) {
       root = {
         id: baseId,
-        title: metaTitle ?? 'درخت دانش',
+        title: metaTitle ?? 'مایندمپ',
         subtitle: metaSubtitle,
         summary:
           typeof metadata.description === 'string'
@@ -692,7 +692,7 @@ export function parseMindmapJson(rawText: string): ParsedMindmapImport {
         ),
       };
     } else {
-      root = convertUnknownToMindmapNode(rec.knowledge_tree, baseId, metaTitle ?? 'درخت دانش');
+      root = convertUnknownToMindmapNode(rec.knowledge_tree, baseId, metaTitle ?? 'مایندمپ');
       if (metaTitle && (!root.title || root.title === 'مفهوم')) {
         root.title = metaTitle;
       }
@@ -701,7 +701,7 @@ export function parseMindmapJson(rawText: string): ParsedMindmapImport {
       }
     }
   } else {
-    root = convertUnknownToMindmapNode(rec, baseId, metaTitle ?? 'درخت دانش');
+    root = convertUnknownToMindmapNode(rec, baseId, metaTitle ?? 'مایندمپ');
   }
 
   // Attach splitting_tree_models if present

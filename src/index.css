@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@custom-variant dark (&:where(.dark, .dark *));
-/* Local fonts - no external font requests */
 
 @font-face {
   font-family: 'Vazirmatn';
@@ -59,6 +57,7 @@
   font-weight: 700;
   font-display: swap;
 }
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
@@ -156,18 +155,28 @@
 }
 
 /* Form Focus Ring matching Archival Scholar Spec */
-.archival-input {
-  height: 42px;
-  padding-inline: 0.875rem;
-  border-radius: 0.5rem;
-  transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+@layer components {
+  .archival-input {
+    height: 42px;
+    padding-inline: 0.875rem;
+    border-radius: 0.5rem;
+    transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .archival-input:focus {
+    outline: none;
+    border-color: #0D9488;
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+  }
 }
 
-.archival-input:focus {
-  outline: none;
-  border-color: #0D9488;
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+/* Clean Persian RTL paragraph justification without stretched gaps */
+.lecture-paragraph {
+  text-align: justify;
+  text-align-last: right;
+  text-justify: inter-word;
+  word-spacing: -0.015em;
 }
 
 /* 3D Flashcard Flip */
@@ -224,6 +233,8 @@
 /* Study Highlights for both Persian prose and atomic KaTeX formula containers */
 mark.study-highlight {
   color: inherit;
+  font-weight: inherit;
+  font-style: inherit;
   cursor: pointer;
   border-radius: 4px;
   transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -243,26 +254,261 @@ mark.study-highlight-formula-block {
   border-radius: 0.75rem;
 }
 
-/* Clean Print / PDF Export styling */
+/* Eye-Friendly Screen Themes (strictly scoped to screen so print/PDF stays crisp black-on-white) */
+@media screen {
+  html.theme-eye-comfort {
+    --surface-desk: #EDE5D4;
+    --surface-paper: #F7F1E3;
+    --surface-card: #FBF7EE;
+    --border-subtle: #DDD2BC;
+    --border-strong: #C9BA9D;
+    --ink-primary: #3B3022;
+    --ink-strong: #292014;
+    --ink-muted: #76654E;
+    --teal-primary: #0F766E;
+    --teal-deep: #115E59;
+    --teal-tint: #EAE2CE;
+  }
+
+  html.theme-eye-comfort body {
+    background-color: #EDE5D4 !important;
+    color: #3B3022 !important;
+  }
+
+  html.theme-eye-comfort .bg-\[\#F4F5F7\] {
+    background-color: #EDE5D4 !important;
+  }
+
+  html.theme-eye-comfort .bg-\[\#FAF9F6\],
+  html.theme-eye-comfort .bg-\[\#FAF9F6\]\/95 {
+    background-color: #F7F1E3 !important;
+  }
+
+  html.theme-eye-comfort .bg-white,
+  html.theme-eye-comfort .bg-white\/95 {
+    background-color: #FBF7EE !important;
+  }
+
+  html.theme-eye-comfort .bg-\[\#F8FAFC\] {
+    background-color: #F2EBDC !important;
+  }
+
+  html.theme-eye-comfort .bg-\[\#F1F5F9\],
+  html.theme-eye-comfort .bg-\[\#E2E8F0\] {
+    background-color: #E7DEC9 !important;
+  }
+
+  html.theme-eye-comfort .border-\[\#E2E8F0\] {
+    border-color: #DDD2BC !important;
+  }
+
+  html.theme-eye-comfort .border-\[\#CBD5E1\] {
+    border-color: #C9BA9D !important;
+  }
+
+  html.theme-eye-comfort .text-\[\#0F172A\],
+  html.theme-eye-comfort .text-\[\#1E293B\] {
+    color: #2E2417 !important;
+  }
+
+  html.theme-eye-comfort .text-\[\#334155\],
+  html.theme-eye-comfort .text-\[\#475569\] {
+    color: #4A3D2C !important;
+  }
+
+  html.theme-eye-comfort .text-\[\#64748B\] {
+    color: #76654E !important;
+  }
+
+  /* Soft Sage Reading Theme */
+  html.theme-sage {
+    --surface-desk: #E5ECE6;
+    --surface-paper: #EFF5F0;
+    --surface-card: #F6FAF6;
+    --border-subtle: #CCD9CE;
+    --border-strong: #B5C8B8;
+    --ink-primary: #1F2E25;
+    --ink-strong: #132018;
+    --ink-muted: #526B5C;
+    --teal-primary: #0F766E;
+    --teal-deep: #115E59;
+    --teal-tint: #DFECE2;
+  }
+
+  html.theme-sage body {
+    background-color: #E5ECE6 !important;
+    color: #1F2E25 !important;
+  }
+
+  html.theme-sage .bg-\[\#F4F5F7\] {
+    background-color: #E5ECE6 !important;
+  }
+
+  html.theme-sage .bg-\[\#FAF9F6\],
+  html.theme-sage .bg-\[\#FAF9F6\]\/95 {
+    background-color: #EFF5F0 !important;
+  }
+
+  html.theme-sage .bg-white,
+  html.theme-sage .bg-white\/95 {
+    background-color: #F6FAF6 !important;
+  }
+
+  html.theme-sage .bg-\[\#F8FAFC\] {
+    background-color: #E8F0E9 !important;
+  }
+
+  html.theme-sage .bg-\[\#F1F5F9\],
+  html.theme-sage .bg-\[\#E2E8F0\] {
+    background-color: #DCE7DD !important;
+  }
+
+  html.theme-sage .border-\[\#E2E8F0\] {
+    border-color: #CCD9CE !important;
+  }
+
+  html.theme-sage .border-\[\#CBD5E1\] {
+    border-color: #B5C8B8 !important;
+  }
+
+  html.theme-sage .text-\[\#0F172A\],
+  html.theme-sage .text-\[\#1E293B\] {
+    color: #18261D !important;
+  }
+
+  html.theme-sage .text-\[\#334155\],
+  html.theme-sage .text-\[\#475569\] {
+    color: #2E4236 !important;
+  }
+
+  html.theme-sage .text-\[\#64748B\] {
+    color: #526B5C !important;
+  }
+
+  /* Warm Midnight (Low-glare dark mode with soft warm charcoal tones) */
+  html.theme-midnight {
+    --surface-desk: #141210;
+    --surface-paper: #1B1815;
+    --surface-card: #231F1B;
+    --border-subtle: #312B25;
+    --border-strong: #443C34;
+    --ink-primary: #E7DFD3;
+    --ink-strong: #F5EFE6;
+    --ink-muted: #A69A8A;
+    --teal-primary: #2DD4BF;
+    --teal-deep: #5EEAD4;
+    --teal-tint: #192A27;
+  }
+
+  html.theme-midnight body {
+    background-color: #141210 !important;
+    color: #E7DFD3 !important;
+  }
+
+  html.theme-midnight .dark\:bg-\[\#0F1419\] {
+    background-color: #141210 !important;
+  }
+
+  html.theme-midnight .dark\:bg-\[\#161D24\],
+  html.theme-midnight .dark\:bg-\[\#161D24\]\/95 {
+    background-color: #1B1815 !important;
+  }
+
+  html.theme-midnight .dark\:bg-\[\#1C252E\],
+  html.theme-midnight .dark\:bg-\[\#1C252E\]\/95 {
+    background-color: #231F1B !important;
+  }
+
+  html.theme-midnight .dark\:bg-\[\#1E293B\] {
+    background-color: #2A2520 !important;
+  }
+
+  html.theme-midnight .dark\:border-\[\#27323E\] {
+    border-color: #312B25 !important;
+  }
+
+  html.theme-midnight .dark\:border-\[\#364554\] {
+    border-color: #443C34 !important;
+  }
+
+  html.theme-midnight .dark\:text-\[\#F8FAFC\],
+  html.theme-midnight .dark\:text-\[\#F1F5F9\],
+  html.theme-midnight .dark\:text-\[\#E2E8F0\] {
+    color: #EFE7DB !important;
+  }
+
+  html.theme-midnight .dark\:text-\[\#CBD5E1\] {
+    color: #D7CCBC !important;
+  }
+
+  html.theme-midnight .dark\:text-\[\#94A3B8\] {
+    color: #A69A8A !important;
+  }
+}
+
+/* Clean High-Contrast Print / PDF Export styling */
+@page {
+  size: A4;
+  margin: 24mm 18mm 24mm 18mm;
+  @top-left { content: none; }
+  @top-center { content: none; }
+  @top-right { content: none; }
+  @bottom-left { content: none; }
+  @bottom-center { content: none; }
+  @bottom-right { content: none; }
+}
+
 @media print {
   header,
   aside,
-  .no-print {
+  .no-print,
+  .print-hide-meta {
     display: none !important;
   }
 
-  body {
+  html,
+  body,
+  #root {
     background: #ffffff !important;
-    color: #0f172a !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
-  main {
+  main,
+  article,
+  .print-surface {
     max-width: 100% !important;
     width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
     border: none !important;
     box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  main *,
+  article *,
+  .print-surface * {
+    color: #000000 !important;
+    border-color: #333333 !important;
+    box-shadow: none !important;
+  }
+
+  .katex,
+  .katex * {
+    color: #000000 !important;
+  }
+
+  blockquote,
+  pre,
+  code,
+  table,
+  th,
+  td {
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 
   mark.study-highlight {
@@ -273,8 +519,14 @@ mark.study-highlight-formula-block {
   .katex-display,
   pre,
   blockquote,
-  table {
+  table,
+  section {
     break-inside: avoid;
+  }
+
+  h1, h2, h3, h4 {
+    break-after: avoid;
+    page-break-after: avoid;
   }
 }
 

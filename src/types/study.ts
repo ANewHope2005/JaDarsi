@@ -9,7 +9,20 @@ export interface LessonResourceLabels {
   quiz?: string;
 }
 
-export type ThemePreference = 'system' | 'light' | 'dark';
+export type ThemePreference =
+  | 'system'
+  | 'light'
+  | 'eye-comfort'
+  | 'sage'
+  | 'dark'
+  | 'midnight';
+
+export interface Course {
+  id: string;
+  name: string;
+  code?: string;
+  createdAt?: string;
+}
 
 export type CalloutVariant = 'important' | 'example' | 'formula';
 
@@ -98,6 +111,7 @@ export interface Lesson {
   id: string;
   chapterNumber: number;
   code: string;
+  courseId?: string;
   course: string;
   title: string;
   subtitle: string;
@@ -139,3 +153,12 @@ export interface TextHighlight {
   createdAt: string;
 }
 
+export interface PassageComment {
+  id: string;
+  lessonId: string;
+  sectionId?: string;
+  quote: string;
+  comment: string;
+  createdAt: string;
+  updatedAt?: string;
+}

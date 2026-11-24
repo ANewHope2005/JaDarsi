@@ -3,14 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, CheckSquare, FileUp, FolderCog, Layers, Network } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BookOpen, CheckSquare, FileUp, FolderCog, Network } from 'lucide-react';
 import {
+  Course,
   Flashcard,
   FlashcardStatus,
   HighlightColor,
   Lesson,
   MindmapNode,
+  PassageComment,
+  QuizQuestion,
   ResourceKind,
   TextHighlight,
   ThemePreference,
@@ -23,14 +26,27 @@ import { MindmapWorkspace } from './components/MindmapWorkspace';
 import { FlashcardWorkspace } from './components/FlashcardWorkspace';
 import { QuizWorkspace } from './components/QuizWorkspace';
 import {
+  LiveReadingSnapshot,
+  ReadingCheckpoint,
+  useStudyTimer,
+} from './components/StudyTimerWidget';
+import { FlashcardIcon } from './components/icons/FlashcardIcon';
+import {
+  CreateCourseInput,
   CreateLessonInput,
   RenameLessonInput,
   ReplaceResourcePayload,
   ResourceManagerWorkspace,
 } from './components/ResourceManagerWorkspace';
-import { SearchModal } from './components/SearchModal';
+import { SearchModal, SearchNavigationTarget } from './components/SearchModal';
 import { NotesDrawer } from './components/NotesDrawer';
 import { ImportModal, LessonImportPayload } from './components/ImportModal';
+import {
+  makeUniqueId,
+  normalizeHierarchy,
+  reorderCoursesHierarchy,
+  reorderSessionsHierarchy,
+} from './utils/hierarchy';
 
 const STORAGE_KEYS = {
   themeMode: 'archival_scholar_theme_mode',
@@ -40,11 +56,16 @@ const STORAGE_KEYS = {
   bookmarks: 'jadarsi_bookmarks_v2',
   notes: 'jadarsi_notes_v2',
   quizScores: 'archival_scholar_quiz_scores',
+  courses: 'jadarsi_courses_v1',
   lessons: 'jadarsi_lessons_v2',
   legacyLessons: 'archival_scholar_lessons_v1',
   rightSidebar: 'archival_scholar_right_sidebar',
   leftSidebar: 'archival_scholar_left_sidebar',
   highlights: 'archival_scholar_highlights_v1',
+  passageComments: 'jadarsi_passage_comments_v1',
+  studyTime: 'jadarsi_study_time_v1',
+  studyCheckpoints: 'jadarsi_study_checkpoints_v1',
+  scrollPositions: 'jadarsi_scroll_positions_v1',
 };
 
 const LEGACY_SAMPLE_IDS = new Set([
@@ -79,9 +100,64 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
+function removeScrollPositions(lessonIds: string[]) {
+  if (lessonIds.length === 0) return;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.scrollPositions);
+    if (!raw) return;
+    const map = JSON.parse(raw) as Record<string, number>;
+    let changed = false;
+    for (const id of lessonIds) {
+      if (id in map) {
+        delete map[id];
+        changed = true;
+      }
+    }
+    if (changed) {
+      window.localStorage.setItem(STORAGE_KEYS.scrollPositions, JSON.stringify(map));
+    }
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+function readInitialCoursesAndLessons(): { courses: Course[]; lessons: Lesson[] } {
+  const initialLessons = readInitialLessons();
+  const savedCourses = readStorage<Course[] | null>(STORAGE_KEYS.courses, null);
+  const today = todayPersianDate();
+
+  if (Array.isArray(savedCourses)) {
+    return normalizeHierarchy(savedCourses, initialLessons, today);
+  }
+
+  // First time migrating existing user lessons into Courses (never creates sample data if empty)
+  if (initialLessons.length === 0) {
+    return { courses: [], lessons: [] };
+  }
+
+  return normalizeHierarchy([], initialLessons, today);
+}
+
+function estimateReadingMinutesFromSections(sections: Lesson['sections']): number {
+  const totalWords = sections.reduce((sum, s) => {
+    const body = s.markdownBody || s.paragraphs.join(' ');
+    const words = `${s.title} ${body}`.trim().split(/\s+/).filter(Boolean).length;
+    return sum + words;
+  }, 0);
+  if (totalWords === 0) return 0;
+  return Math.max(1, Math.round(totalWords / 180));
+}
+
 function readThemePreference(): ThemePreference {
   const stored = readStorage<string | null>(STORAGE_KEYS.themeMode, null);
-  if (stored === 'light' || stored === 'dark' || stored === 'system') {
+  if (
+    stored === 'system' ||
+    stored === 'light' ||
+    stored === 'eye-comfort' ||
+    stored === 'sage' ||
+    stored === 'dark' ||
+    stored === 'midnight'
+  ) {
     return stored;
   }
   return 'system';
@@ -98,9 +174,9 @@ function createEmptyMindmapNode(lessonId: string, title: string): MindmapNode {
   return {
     id: `empty-mm-${lessonId}-${Date.now().toString(36).slice(-4)}`,
     title,
-    subtitle: 'بدون درخت دانش',
+    subtitle: 'بدون مایندمپ',
     summary:
-      'هنوز فایل درخت دانش (.json) برای این درس ثبت نشده است. از بخش «مدیریت منابع» فایل مایندمپ را بارگذاری کنید.',
+      'هنوز فایل مایندمپ (.json) برای این جلسه ثبت نشده است. از بخش «مدیریت منابع» فایل مایندمپ را بارگذاری کنید.',
   };
 }
 
@@ -113,7 +189,9 @@ function todayPersianDate(): string {
 }
 
 export default function App() {
-  const [lessons, setLessons] = useState<Lesson[]>(() => readInitialLessons());
+  const initialHierarchy = useMemo(() => readInitialCoursesAndLessons(), []);
+  const [courses, setCourses] = useState<Course[]>(() => initialHierarchy.courses);
+  const [lessons, setLessons] = useState<Lesson[]>(() => initialHierarchy.lessons);
 
   const [activeLessonId, setActiveLessonId] = useState<string | null>(() => lessons[0]?.id ?? null);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('notes');
@@ -121,7 +199,10 @@ export default function App() {
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => getSystemPrefersDark());
   const [fontScale, setFontScale] = useState<number>(() => readStorage(STORAGE_KEYS.fontScale, 0));
 
-  const isDark = themePreference === 'dark' || (themePreference === 'system' && systemPrefersDark);
+  const isDark =
+    themePreference === 'dark' ||
+    themePreference === 'midnight' ||
+    (themePreference === 'system' && systemPrefersDark);
 
   // Persistent collapsible sidebar states for the Lecture Note view
   const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(() =>
@@ -149,16 +230,101 @@ export default function App() {
   const [highlights, setHighlights] = useState<TextHighlight[]>(() =>
     readStorage(STORAGE_KEYS.highlights, [])
   );
+  const [passageComments, setPassageComments] = useState<PassageComment[]>(() =>
+    readStorage(STORAGE_KEYS.passageComments, [])
+  );
+  const [studySecondsByLesson, setStudySecondsByLesson] = useState<Record<string, number>>(() =>
+    readStorage(STORAGE_KEYS.studyTime, {})
+  );
+  const [studyCheckpointsByLesson, setStudyCheckpointsByLesson] = useState<
+    Record<string, ReadingCheckpoint>
+  >(() => readStorage(STORAGE_KEYS.studyCheckpoints, {}));
+  const [liveReadingSnapshot, setLiveReadingSnapshot] = useState<LiveReadingSnapshot | null>(null);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [mobileSyllabusOpen, setMobileSyllabusOpen] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [focusSectionId, setFocusSectionId] = useState<string | null>(null);
+  const [focusMindmapNodeId, setFocusMindmapNodeId] = useState<string | null>(null);
+  const [focusFlashcardId, setFocusFlashcardId] = useState<string | null>(null);
+  const [focusQuizQuestionId, setFocusQuizQuestionId] = useState<string | null>(null);
 
   const activeLesson = useMemo<Lesson | null>(
     () => lessons.find((l) => l.id === activeLessonId) ?? lessons[0] ?? null,
     [lessons, activeLessonId]
+  );
+
+  const isFullFocusMode =
+    workspaceMode === 'notes' &&
+    Boolean(activeLesson) &&
+    headerCollapsed &&
+    !rightSidebarOpen &&
+    !leftSidebarOpen;
+
+  // Manual-only study timer: never auto-starts or auto-increments on lesson open.
+  const studyTimer = useStudyTimer();
+
+  const handleSaveStudySession = useCallback(
+    (elapsedSeconds: number) => {
+      if (!activeLesson || elapsedSeconds <= 0) return;
+      const lessonId = activeLesson.id;
+
+      // 1. Add elapsed study seconds & persist immediately
+      setStudySecondsByLesson((prev) => {
+        const next = {
+          ...prev,
+          [lessonId]: (prev[lessonId] ?? 0) + elapsedSeconds,
+        };
+        try {
+          window.localStorage.setItem(STORAGE_KEYS.studyTime, JSON.stringify(next));
+        } catch {
+          // ignore storage quota errors
+        }
+        return next;
+      });
+
+      // 2. Sync & persist current reading position + active subsection checkpoint
+      const currentSnapshot =
+        liveReadingSnapshot && liveReadingSnapshot.lessonId === lessonId
+          ? liveReadingSnapshot
+          : null;
+      const scrollY =
+        workspaceMode === 'notes'
+          ? Math.max(0, Math.round(window.scrollY))
+          : currentSnapshot?.scrollY ?? 0;
+
+      const checkpoint: ReadingCheckpoint = {
+        sectionId: currentSnapshot?.sectionId ?? activeLesson.sections[0]?.id ?? '',
+        sectionTitle:
+          currentSnapshot?.sectionTitle ?? activeLesson.sections[0]?.title ?? activeLesson.title,
+        progressPercent: currentSnapshot?.progressPercent ?? 0,
+        scrollY,
+        savedAt: todayPersianDate(),
+      };
+
+      setStudyCheckpointsByLesson((prev) => {
+        const next = { ...prev, [lessonId]: checkpoint };
+        try {
+          window.localStorage.setItem(STORAGE_KEYS.studyCheckpoints, JSON.stringify(next));
+        } catch {
+          // ignore storage quota errors
+        }
+        return next;
+      });
+
+      // Also sync scroll position map so reopening the lesson restores this exact point
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEYS.scrollPositions);
+        const scrollMap = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+        scrollMap[lessonId] = scrollY;
+        window.localStorage.setItem(STORAGE_KEYS.scrollPositions, JSON.stringify(scrollMap));
+      } catch {
+        // ignore storage quota errors
+      }
+    },
+    [activeLesson, liveReadingSnapshot, workspaceMode]
   );
 
   // Listen dynamically to OS/browser prefers-color-scheme changes
@@ -177,10 +343,14 @@ export default function App() {
     return () => mq.removeListener(handleChange);
   }, []);
 
-  // Sync Tailwind dark class, colorScheme, and persist manual/system preference
+  // Sync Tailwind dark class + Eye-Friendly theme classes, colorScheme, and persist preference
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark);
-    document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+    const root = document.documentElement;
+    root.classList.toggle('dark', isDark);
+    root.classList.toggle('theme-eye-comfort', themePreference === 'eye-comfort');
+    root.classList.toggle('theme-sage', themePreference === 'sage');
+    root.classList.toggle('theme-midnight', themePreference === 'midnight');
+    root.style.colorScheme = isDark ? 'dark' : 'light';
     try {
       window.localStorage.setItem(STORAGE_KEYS.themeMode, JSON.stringify(themePreference));
     } catch {
@@ -188,7 +358,7 @@ export default function App() {
     }
   }, [isDark, themePreference]);
 
-  // Persist user preferences, sidebar states, lessons, and study progress
+  // Persist user preferences, sidebar states, courses, lessons, and study progress
   useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEYS.fontScale, JSON.stringify(fontScale));
@@ -199,8 +369,10 @@ export default function App() {
       window.localStorage.setItem(STORAGE_KEYS.bookmarks, JSON.stringify(bookmarkedSections));
       window.localStorage.setItem(STORAGE_KEYS.notes, JSON.stringify(userNotes));
       window.localStorage.setItem(STORAGE_KEYS.quizScores, JSON.stringify(quizBestScores));
+      window.localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
       window.localStorage.setItem(STORAGE_KEYS.lessons, JSON.stringify(lessons));
       window.localStorage.setItem(STORAGE_KEYS.highlights, JSON.stringify(highlights));
+      window.localStorage.setItem(STORAGE_KEYS.passageComments, JSON.stringify(passageComments));
     } catch {
       // ignore storage quota errors
     }
@@ -213,20 +385,40 @@ export default function App() {
     bookmarkedSections,
     userNotes,
     quizBestScores,
+    courses,
     lessons,
     highlights,
+    passageComments,
   ]);
 
-  // Global keyboard shortcut: Ctrl/Cmd + K for Search
+  // Persist per-lesson study duration & checkpoints immediately when updated
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.studyTime, JSON.stringify(studySecondsByLesson));
+      window.localStorage.setItem(
+        STORAGE_KEYS.studyCheckpoints,
+        JSON.stringify(studyCheckpointsByLesson)
+      );
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [studySecondsByLesson, studyCheckpointsByLesson]);
+
+  // Global keyboard shortcut: Ctrl/Cmd + K for Search (capture phase + supports Persian keyboard layout)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      const isK =
+        e.code === 'KeyK' ||
+        e.key.toLowerCase() === 'k' ||
+        e.key === 'ن';
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && isK) {
         e.preventDefault();
+        e.stopPropagation();
         setSearchOpen((prev) => !prev);
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
   const activeLessonCards = useMemo(() => {
@@ -258,15 +450,39 @@ export default function App() {
     setFontScale((prev) => Math.max(-2, Math.min(3, prev + delta)));
   };
 
-  const handleToggleFocusMode = () => {
-    if (!rightSidebarOpen && !leftSidebarOpen) {
+  const handleToggleHeaderCollapsed = useCallback(() => {
+    setHeaderCollapsed((prev) => !prev);
+  }, []);
+
+  const handleToggleFocusMode = useCallback(() => {
+    if (headerCollapsed && !rightSidebarOpen && !leftSidebarOpen) {
+      setHeaderCollapsed(false);
       setRightSidebarOpen(true);
       setLeftSidebarOpen(true);
     } else {
+      setHeaderCollapsed(true);
       setRightSidebarOpen(false);
       setLeftSidebarOpen(false);
     }
-  };
+  }, [headerCollapsed, rightSidebarOpen, leftSidebarOpen]);
+
+  const handleExitFocusMode = useCallback(() => {
+    setHeaderCollapsed(false);
+    setRightSidebarOpen(true);
+    setLeftSidebarOpen(true);
+  }, []);
+
+  // Allow pressing Escape to exit Full Focus Mode when no modal/drawer is open
+  useEffect(() => {
+    if (!isFullFocusMode) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !searchOpen && !drawerOpen && !importModalOpen && !mobileSyllabusOpen) {
+        handleExitFocusMode();
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [isFullFocusMode, searchOpen, drawerOpen, importModalOpen, mobileSyllabusOpen, handleExitFocusMode]);
 
   const handleToggleBookmark = (sectionKey: string) => {
     setBookmarkedSections((prev) =>
@@ -279,8 +495,26 @@ export default function App() {
     setFocusSectionId(sectionId);
   }, []);
 
+  const handleJumpToLessonSection = useCallback((lessonId: string, sectionId: string) => {
+    setActiveLessonId(lessonId);
+    setWorkspaceMode('notes');
+    setFocusSectionId(sectionId);
+  }, []);
+
   const handleClearFocusSection = useCallback(() => {
     setFocusSectionId(null);
+  }, []);
+
+  const handleClearFocusMindmapNode = useCallback(() => {
+    setFocusMindmapNodeId(null);
+  }, []);
+
+  const handleClearFocusFlashcard = useCallback(() => {
+    setFocusFlashcardId(null);
+  }, []);
+
+  const handleClearFocusQuizQuestion = useCallback(() => {
+    setFocusQuizQuestionId(null);
   }, []);
 
   const handleUpdateCardStatus = (cardId: string, status: FlashcardStatus) => {
@@ -306,16 +540,6 @@ export default function App() {
       ...prev,
       [activeLesson.id]: [...(prev[activeLesson.id] ?? []), newCard],
     }));
-  };
-
-  const handleCreateFlashcardFromNode = (node: MindmapNode) => {
-    handleAddCustomCard({
-      front: `مفهوم «${node.title}» را توضیح دهید.`,
-      frontFormula: node.formula,
-      back: node.summary,
-      category: 'ساخته‌شده از مایندمپ',
-      sectionId: node.sectionId,
-    });
   };
 
   const handleAddNote = (lessonId: string, title: string, content: string, sectionId?: string) => {
@@ -349,11 +573,7 @@ export default function App() {
   }, []);
 
   const handleApplyImport = (payload: LessonImportPayload) => {
-    const todayFa = new Date().toLocaleDateString('fa-IR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    const todayFa = todayPersianDate();
 
     if (payload.mode === 'update') {
       if (!activeLesson) return;
@@ -380,15 +600,40 @@ export default function App() {
       return;
     }
 
-    // Create a brand new lesson/chapter without injecting any dummy content
-    const newId = `lesson-custom-${Date.now().toString(36)}`;
-    const chapterNumber = lessons.length + 1;
+    // Create a brand new Session strictly attached to an existing Course OR a newly created distinct Course
+    const newId = makeUniqueId('lesson');
+    let nextCourses = courses;
+    let resolvedCourseId: string | undefined = payload.createNewCourse ? undefined : payload.courseId;
+    let resolvedCourseName = payload.course.trim() || 'درس جدید';
+
+    if (resolvedCourseId) {
+      const matched = courses.find((c) => c.id === resolvedCourseId);
+      if (matched) {
+        resolvedCourseName = matched.name;
+      } else {
+        resolvedCourseId = undefined;
+      }
+    }
+
+    if (!resolvedCourseId) {
+      // Explicitly create a distinct top-level Course rather than merging into an existing one
+      const createdCourse: Course = {
+        id: makeUniqueId('course'),
+        name: resolvedCourseName,
+        createdAt: todayFa,
+      };
+      resolvedCourseId = createdCourse.id;
+      nextCourses = [...courses, createdCourse];
+    }
+
+    const existingSessionsInCourse = lessons.filter((l) => l.courseId === resolvedCourseId).length;
 
     const newLesson: Lesson = {
       id: newId,
-      chapterNumber,
+      chapterNumber: existingSessionsInCourse + 1,
       code: payload.code,
-      course: payload.course,
+      course: resolvedCourseName,
+      courseId: resolvedCourseId,
       title: payload.title,
       subtitle:
         payload.markdown?.subtitle ??
@@ -406,7 +651,9 @@ export default function App() {
       isCustom: true,
     };
 
-    setLessons((prev) => [...prev, newLesson]);
+    const normalized = normalizeHierarchy(nextCourses, [...lessons, newLesson], todayFa);
+    setCourses(normalized.courses);
+    setLessons(normalized.lessons);
     setActiveLessonId(newLesson.id);
 
     // Jump directly to the most relevant tab that received content
@@ -421,15 +668,16 @@ export default function App() {
 
   const handleDeleteLesson = useCallback(
     (lessonId: string) => {
-      setLessons((prev) => {
-        const remaining = prev
-          .filter((l) => l.id !== lessonId)
-          .map((l, idx) => ({ ...l, chapterNumber: idx + 1 }));
-        if (activeLessonId === lessonId) {
-          setActiveLessonId(remaining[0]?.id ?? null);
-        }
-        return remaining;
-      });
+      const normalized = normalizeHierarchy(
+        courses,
+        lessons.filter((l) => l.id !== lessonId),
+        todayPersianDate()
+      );
+      setLessons(normalized.lessons);
+      if (activeLessonId === lessonId) {
+        setActiveLessonId(normalized.lessons[0]?.id ?? null);
+      }
+      removeScrollPositions([lessonId]);
       setCustomCardsByLesson((prev) => {
         const next = { ...prev };
         delete next[lessonId];
@@ -437,29 +685,173 @@ export default function App() {
       });
       setUserNotes((prev) => prev.filter((n) => n.lessonId !== lessonId));
       setHighlights((prev) => prev.filter((h) => h.lessonId !== lessonId));
+      setPassageComments((prev) => prev.filter((c) => c.lessonId !== lessonId));
       setBookmarkedSections((prev) => prev.filter((k) => !k.startsWith(`${lessonId}:`)));
       setQuizBestScores((prev) => {
         const next = { ...prev };
         delete next[lessonId];
         return next;
       });
+      setStudySecondsByLesson((prev) => {
+        if (!(lessonId in prev)) return prev;
+        const next = { ...prev };
+        delete next[lessonId];
+        return next;
+      });
+      setStudyCheckpointsByLesson((prev) => {
+        if (!(lessonId in prev)) return prev;
+        const next = { ...prev };
+        delete next[lessonId];
+        return next;
+      });
     },
-    [activeLessonId]
+    [courses, lessons, activeLessonId]
+  );
+
+  const handleCreateCourse = useCallback((input: CreateCourseInput): string => {
+    const id = makeUniqueId('course');
+    const nextCourse: Course = {
+      id,
+      name: input.name.trim(),
+      code: input.code?.trim() || undefined,
+      createdAt: todayPersianDate(),
+    };
+    setCourses((prev) => [...prev, nextCourse]);
+    return id;
+  }, []);
+
+  const handleRenameCourse = useCallback((courseId: string, input: CreateCourseInput) => {
+    const trimmedName = input.name.trim();
+    if (!trimmedName) return;
+    setCourses((prev) =>
+      prev.map((c) =>
+        c.id === courseId ? { ...c, name: trimmedName, code: input.code?.trim() || undefined } : c
+      )
+    );
+    setLessons((prev) =>
+      prev.map((l) => (l.courseId === courseId ? { ...l, course: trimmedName } : l))
+    );
+  }, []);
+
+  const handleDeleteCourse = useCallback(
+    (courseId: string) => {
+      const removedLessonIds = new Set(
+        lessons.filter((l) => l.courseId === courseId).map((l) => l.id)
+      );
+      const nextCourses = courses.filter((c) => c.id !== courseId);
+      const normalized = normalizeHierarchy(
+        nextCourses,
+        lessons.filter((l) => !removedLessonIds.has(l.id)),
+        todayPersianDate()
+      );
+      setCourses(normalized.courses);
+      setLessons(normalized.lessons);
+      if (activeLessonId && removedLessonIds.has(activeLessonId)) {
+        setActiveLessonId(normalized.lessons[0]?.id ?? null);
+      }
+      if (removedLessonIds.size > 0) {
+        removeScrollPositions(Array.from(removedLessonIds));
+        setCustomCardsByLesson((prev) => {
+          const next = { ...prev };
+          removedLessonIds.forEach((id) => delete next[id]);
+          return next;
+        });
+        setUserNotes((prev) => prev.filter((n) => !removedLessonIds.has(n.lessonId)));
+        setHighlights((prev) => prev.filter((h) => !removedLessonIds.has(h.lessonId)));
+        setPassageComments((prev) => prev.filter((c) => !removedLessonIds.has(c.lessonId)));
+        setBookmarkedSections((prev) =>
+          prev.filter((k) => !removedLessonIds.has(k.split(':')[0] ?? ''))
+        );
+        setQuizBestScores((prev) => {
+          const next = { ...prev };
+          removedLessonIds.forEach((id) => delete next[id]);
+          return next;
+        });
+        setStudySecondsByLesson((prev) => {
+          const next = { ...prev };
+          removedLessonIds.forEach((id) => delete next[id]);
+          return next;
+        });
+        setStudyCheckpointsByLesson((prev) => {
+          const next = { ...prev };
+          removedLessonIds.forEach((id) => delete next[id]);
+          return next;
+        });
+      }
+    },
+    [courses, lessons, activeLessonId]
+  );
+
+  const handleReorderCourses = useCallback(
+    (dragCourseId: string, targetCourseId: string) => {
+      const result = reorderCoursesHierarchy(
+        courses,
+        lessons,
+        dragCourseId,
+        targetCourseId,
+        todayPersianDate()
+      );
+      setCourses(result.courses);
+      setLessons(result.lessons);
+    },
+    [courses, lessons]
+  );
+
+  const handleReorderLessons = useCallback(
+    (dragLessonId: string, targetLessonId: string | null, targetCourseId?: string) => {
+      const result = reorderSessionsHierarchy(
+        courses,
+        lessons,
+        dragLessonId,
+        targetLessonId,
+        targetCourseId,
+        todayPersianDate()
+      );
+      setLessons(result.lessons);
+    },
+    [courses, lessons]
   );
 
   const handleCreateLesson = useCallback(
     (input: CreateLessonInput): string => {
-      const newId = `lesson-custom-${Date.now().toString(36)}`;
-      const chapterNumber = lessons.length + 1;
+      const today = todayPersianDate();
+      const newId = makeUniqueId('lesson');
+
+      let nextCourses = courses;
+      let resolvedCourseId: string | undefined = input.createNewCourse ? undefined : input.courseId;
+      let resolvedCourseName = input.course.trim() || 'درس جدید';
+
+      if (resolvedCourseId) {
+        const existing = courses.find((c) => c.id === resolvedCourseId);
+        if (existing) {
+          resolvedCourseName = existing.name;
+        } else {
+          resolvedCourseId = undefined;
+        }
+      }
+
+      if (!resolvedCourseId) {
+        const createdCourse: Course = {
+          id: makeUniqueId('course'),
+          name: resolvedCourseName,
+          createdAt: today,
+        };
+        resolvedCourseId = createdCourse.id;
+        nextCourses = [...courses, createdCourse];
+      }
+
+      const existingSessionsInCourse = lessons.filter((l) => l.courseId === resolvedCourseId).length;
+
       const newLesson: Lesson = {
         id: newId,
-        chapterNumber,
+        chapterNumber: existingSessionsInCourse + 1,
         code: input.code,
-        course: input.course,
+        course: resolvedCourseName,
+        courseId: resolvedCourseId,
         title: input.title,
-        subtitle: 'درس ایجادشده در مدیریت منابع جادرسی',
+        subtitle: '',
         readingMinutes: 0,
-        lastUpdated: todayPersianDate(),
+        lastUpdated: today,
         author: 'کتابخانه شخصی جادرسی',
         summary: '',
         sections: [],
@@ -468,28 +860,38 @@ export default function App() {
         quiz: [],
         isCustom: true,
       };
-      setLessons((prev) => [...prev, newLesson]);
+
+      const normalized = normalizeHierarchy(nextCourses, [...lessons, newLesson], today);
+      setCourses(normalized.courses);
+      setLessons(normalized.lessons);
       return newId;
     },
-    [lessons.length]
+    [courses, lessons]
   );
 
-  const handleRenameLesson = useCallback((lessonId: string, input: RenameLessonInput) => {
-    const today = todayPersianDate();
-    setLessons((prev) =>
-      prev.map((l) =>
+  const handleRenameLesson = useCallback(
+    (lessonId: string, input: RenameLessonInput) => {
+      const today = todayPersianDate();
+      const matchedCourse = input.courseId
+        ? courses.find((c) => c.id === input.courseId)
+        : undefined;
+      const updatedLessons = lessons.map((l) =>
         l.id === lessonId
           ? {
               ...l,
               title: input.title,
-              course: input.course,
+              course: matchedCourse ? matchedCourse.name : input.course,
+              courseId: matchedCourse ? matchedCourse.id : l.courseId,
               code: input.code,
               lastUpdated: today,
             }
           : l
-      )
-    );
-  }, []);
+      );
+      const normalized = normalizeHierarchy(courses, updatedLessons, today);
+      setLessons(normalized.lessons);
+    },
+    [courses, lessons]
+  );
 
   const handleReplaceResource = useCallback(
     (lessonId: string, payload: ReplaceResourcePayload) => {
@@ -721,6 +1123,9 @@ export default function App() {
         setHighlights((prev) =>
           prev.map((h) => (h.lessonId === fromLessonId ? { ...h, lessonId: toLessonId } : h))
         );
+        setPassageComments((prev) =>
+          prev.map((c) => (c.lessonId === fromLessonId ? { ...c, lessonId: toLessonId } : c))
+        );
       }
     },
     [customCardsByLesson]
@@ -740,6 +1145,7 @@ export default function App() {
 
     if (kind === 'lecture') {
       setHighlights((prev) => prev.filter((h) => h.lessonId !== lessonId));
+      setPassageComments((prev) => prev.filter((c) => c.lessonId !== lessonId));
     }
 
     setLessons((prev) =>
@@ -784,13 +1190,17 @@ export default function App() {
     );
   }, []);
 
-  const handleSearchNavigate = (lessonId: string, mode: WorkspaceMode, sectionId?: string) => {
-    setActiveLessonId(lessonId);
-    setWorkspaceMode(mode);
-    if (mode === 'notes' && sectionId) {
-      setFocusSectionId(sectionId);
+  const handleSearchNavigate = useCallback((target: SearchNavigationTarget) => {
+    setActiveLessonId(target.lessonId);
+    setWorkspaceMode(target.mode);
+    setFocusSectionId(target.mode === 'notes' ? (target.sectionId ?? null) : null);
+    setFocusMindmapNodeId(target.mode === 'mindmap' ? (target.mindmapNodeId ?? null) : null);
+    setFocusFlashcardId(target.mode === 'flashcards' ? (target.flashcardId ?? null) : null);
+    setFocusQuizQuestionId(target.mode === 'quiz' ? (target.quizQuestionId ?? null) : null);
+    if (target.mode !== 'notes') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
+  }, []);
 
   const activeLessonNotes = useMemo(
     () => (activeLesson ? userNotes.filter((n) => n.lessonId === activeLesson.id) : []),
@@ -803,8 +1213,8 @@ export default function App() {
   );
 
   const handleAddHighlight = useCallback(
-    (payload: NewHighlightPayload) => {
-      if (!activeLesson || payload.anchors.length === 0) return;
+    (payload: NewHighlightPayload): string | null => {
+      if (!activeLesson || payload.anchors.length === 0) return null;
       const now = new Date().toLocaleDateString('fa-IR', {
         month: 'short',
         day: 'numeric',
@@ -813,6 +1223,19 @@ export default function App() {
         .map((a) => `${a.kind}:${a.value}`)
         .sort()
         .join('|');
+
+      const existing = highlights.find((h) => {
+        if (h.lessonId !== activeLesson.id) return false;
+        if ((h.sectionId ?? '') !== (payload.sectionId ?? '')) return false;
+        const existingSig = (h.anchors ?? [{ kind: 'text', value: h.text }])
+          .map((a) => `${a.kind}:${a.value}`)
+          .sort()
+          .join('|');
+        return existingSig === anchorSig;
+      });
+
+      const targetId =
+        existing?.id ?? `hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
       setHighlights((prev) => {
         const next = [...prev];
@@ -837,7 +1260,7 @@ export default function App() {
         }
 
         next.unshift({
-          id: `hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: targetId,
           lessonId: activeLesson.id,
           sectionId: payload.sectionId,
           text: payload.text,
@@ -847,8 +1270,10 @@ export default function App() {
         });
         return next;
       });
+
+      return targetId;
     },
-    [activeLesson]
+    [activeLesson, highlights]
   );
 
   const handleRemoveHighlight = useCallback((highlightId: string) => {
@@ -873,19 +1298,244 @@ export default function App() {
     setHighlights((prev) => prev.filter((h) => h.lessonId !== activeLesson.id));
   };
 
+  // Inline Passage Comments handlers
+  const activeLessonComments = useMemo(
+    () => (activeLesson ? passageComments.filter((c) => c.lessonId === activeLesson.id) : []),
+    [passageComments, activeLesson]
+  );
+
+  const handleAddPassageComment = useCallback(
+    (payload: { sectionId?: string; quote: string; comment: string }) => {
+      if (!activeLesson) return;
+      const newComment: PassageComment = {
+        id: `pc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+        lessonId: activeLesson.id,
+        sectionId: payload.sectionId,
+        quote: payload.quote,
+        comment: payload.comment,
+        createdAt: todayPersianDate(),
+      };
+      setPassageComments((prev) => [newComment, ...prev]);
+    },
+    [activeLesson]
+  );
+
+  const handleUpdatePassageComment = useCallback((commentId: string, comment: string) => {
+    setPassageComments((prev) =>
+      prev.map((c) =>
+        c.id === commentId ? { ...c, comment, updatedAt: todayPersianDate() } : c
+      )
+    );
+  }, []);
+
+  const handleDeletePassageComment = useCallback((commentId: string) => {
+    setPassageComments((prev) => prev.filter((c) => c.id !== commentId));
+  }, []);
+
+  // Single-Item Content Edit & Delete Handlers (Sections, Flashcards, Mindmap, Quiz)
+  const handleUpdateSection = useCallback(
+    (lessonId: string, sectionId: string, updates: { title: string; markdownBody: string }) => {
+      const today = todayPersianDate();
+      setLessons((prev) =>
+        prev.map((lesson) => {
+          if (lesson.id !== lessonId) return lesson;
+          const nextSections = lesson.sections.map((s) =>
+            s.id === sectionId
+              ? {
+                  ...s,
+                  title: updates.title,
+                  markdownBody: updates.markdownBody,
+                  paragraphs: [],
+                }
+              : s
+          );
+          return {
+            ...lesson,
+            lastUpdated: today,
+            sections: nextSections,
+            readingMinutes: estimateReadingMinutesFromSections(nextSections),
+          };
+        })
+      );
+    },
+    []
+  );
+
+  const handleAddSection = useCallback(
+    (lessonId: string, input: { title: string; markdownBody: string }) => {
+      const today = todayPersianDate();
+      setLessons((prev) =>
+        prev.map((lesson) => {
+          if (lesson.id !== lessonId) return lesson;
+          const nextIdx = lesson.sections.length + 1;
+          const newSection = {
+            id: `sec-${Date.now().toString(36)}-${nextIdx}`,
+            number: `${lesson.chapterNumber}.${nextIdx}`,
+            title: input.title,
+            paragraphs: [],
+            markdownBody: input.markdownBody,
+          };
+          const nextSections = [...lesson.sections, newSection];
+          return {
+            ...lesson,
+            lastUpdated: today,
+            sections: nextSections,
+            readingMinutes: estimateReadingMinutesFromSections(nextSections),
+          };
+        })
+      );
+    },
+    []
+  );
+
+  const handleDeleteSection = useCallback((lessonId: string, sectionId: string) => {
+    const today = todayPersianDate();
+    setLessons((prev) =>
+      prev.map((lesson) => {
+        if (lesson.id !== lessonId) return lesson;
+        const nextSections = lesson.sections
+          .filter((s) => s.id !== sectionId)
+          .map((s, idx) => ({ ...s, number: `${lesson.chapterNumber}.${idx + 1}` }));
+        return {
+          ...lesson,
+          lastUpdated: today,
+          sections: nextSections,
+          readingMinutes: estimateReadingMinutesFromSections(nextSections),
+        };
+      })
+    );
+    setBookmarkedSections((prev) => prev.filter((k) => k !== `${lessonId}:${sectionId}`));
+  }, []);
+
+  const handleUpdateFlashcard = useCallback(
+    (cardId: string, updates: Partial<Flashcard>) => {
+      if (!activeLesson) return;
+      const lessonId = activeLesson.id;
+      const inImported = activeLesson.flashcards.some((c) => c.id === cardId);
+      if (inImported) {
+        setLessons((prev) =>
+          prev.map((l) =>
+            l.id === lessonId
+              ? {
+                  ...l,
+                  lastUpdated: todayPersianDate(),
+                  flashcards: l.flashcards.map((c) =>
+                    c.id === cardId ? { ...c, ...updates } : c
+                  ),
+                }
+              : l
+          )
+        );
+      } else {
+        setCustomCardsByLesson((prev) => ({
+          ...prev,
+          [lessonId]: (prev[lessonId] ?? []).map((c) =>
+            c.id === cardId ? { ...c, ...updates } : c
+          ),
+        }));
+      }
+    },
+    [activeLesson]
+  );
+
+  const handleDeleteFlashcard = useCallback(
+    (cardId: string) => {
+      if (!activeLesson) return;
+      const lessonId = activeLesson.id;
+      setLessons((prev) =>
+        prev.map((l) =>
+          l.id === lessonId
+            ? {
+                ...l,
+                lastUpdated: todayPersianDate(),
+                flashcards: l.flashcards.filter((c) => c.id !== cardId),
+              }
+            : l
+        )
+      );
+      setCustomCardsByLesson((prev) => {
+        const list = prev[lessonId];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [lessonId]: list.filter((c) => c.id !== cardId),
+        };
+      });
+      setCardStatuses((prev) => {
+        if (!(cardId in prev)) return prev;
+        const next = { ...prev };
+        delete next[cardId];
+        return next;
+      });
+    },
+    [activeLesson]
+  );
+
+  const handleUpdateMindmap = useCallback(
+    (nextRoot: MindmapNode) => {
+      if (!activeLesson) return;
+      const lessonId = activeLesson.id;
+      setLessons((prev) =>
+        prev.map((l) =>
+          l.id === lessonId
+            ? {
+                ...l,
+                lastUpdated: todayPersianDate(),
+                mindmap: nextRoot,
+              }
+            : l
+        )
+      );
+    },
+    [activeLesson]
+  );
+
+  const handleUpdateQuizQuestion = useCallback((lessonId: string, question: QuizQuestion) => {
+    setLessons((prev) =>
+      prev.map((l) =>
+        l.id === lessonId
+          ? {
+              ...l,
+              lastUpdated: todayPersianDate(),
+              quiz: l.quiz.map((q) => (q.id === question.id ? question : q)),
+            }
+          : l
+      )
+    );
+  }, []);
+
+  const handleDeleteQuizQuestion = useCallback((lessonId: string, questionId: string) => {
+    setLessons((prev) =>
+      prev.map((l) =>
+        l.id === lessonId
+          ? {
+              ...l,
+              lastUpdated: todayPersianDate(),
+              quiz: l.quiz.filter((q) => q.id !== questionId),
+            }
+          : l
+      )
+    );
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#F4F5F7] text-[#1E293B] transition-colors dark:bg-[#0F1419] dark:text-[#E2E8F0]">
       <Header
+        courses={courses}
         lessons={lessons}
         activeLesson={activeLesson}
         onSelectLesson={(id) => {
           setActiveLessonId(id);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          if (workspaceMode !== 'notes') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
         }}
         workspaceMode={workspaceMode}
         onChangeMode={(mode) => {
           setWorkspaceMode(mode);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          if (mode !== 'notes') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
         }}
         fontScale={fontScale}
         onAdjustFontScale={handleAdjustFontScale}
@@ -899,6 +1549,15 @@ export default function App() {
         onOpenMobileSyllabus={() => setMobileSyllabusOpen(true)}
         notesCount={activeLessonNotes.length}
         lessonMasteryMap={lessonMasteryMap}
+        headerCollapsed={headerCollapsed}
+        onToggleHeaderCollapsed={handleToggleHeaderCollapsed}
+        isFullFocusMode={isFullFocusMode}
+        onExitFocusMode={handleExitFocusMode}
+        studyTimer={studyTimer}
+        activeLessonStudySeconds={activeLesson ? studySecondsByLesson[activeLesson.id] ?? 0 : 0}
+        liveReadingSnapshot={liveReadingSnapshot}
+        activeLessonCheckpoint={activeLesson ? studyCheckpointsByLesson[activeLesson.id] ?? null : null}
+        onSaveStudySession={handleSaveStudySession}
       />
 
       {workspaceMode !== 'resources' && !activeLesson && (
@@ -912,7 +1571,7 @@ export default function App() {
               به جادرسی خوش آمدید
             </h1>
             <p className="mx-auto mt-3 max-w-[540px] text-sm leading-7 text-[#475569] dark:text-[#94A3B8]">
-              میز مطالعه شما کاملاً تمیز و آماده شروع است. اولین درس خود را ایجاد کنید و جزوه، درخت دانش، فلش‌کارت یا آزمون تستی آن را وارد نمایید.
+              میز مطالعه شما کاملاً تمیز و آماده شروع است. اولین درس خود را ایجاد کنید و جزوه، مایندمپ، فلش‌کارت یا آزمون تستی آن را وارد نمایید.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
@@ -958,16 +1617,16 @@ export default function App() {
                   </span>
                 </div>
                 <h2 className="mt-2.5 text-xs font-bold text-[#0F172A] dark:text-[#F1F5F9]">
-                  مایندمپ و درخت دانش
+                  مایندمپ
                 </h2>
                 <p className="mt-1 text-[11px] leading-5 text-[#64748B] dark:text-[#94A3B8]">
-                  نمای درختی و گرافیکی تعاملی با بازرس مفاهیم و فرمول‌ها
+                  نمای درختی و گرافیکی مرکزی تعاملی برای مرور ساختار مفاهیم
                 </p>
               </div>
 
               <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 dark:border-[#27323E] dark:bg-[#1C252E]">
                 <div className="flex items-center justify-between">
-                  <Layers className="h-4.5 w-4.5 text-[#0D9488] dark:text-[#2DD4BF]" />
+                  <FlashcardIcon className="h-4.5 w-4.5 text-[#0D9488] dark:text-[#2DD4BF]" />
                   <span className="ltr-inline font-mono text-[11px] font-medium text-[#64748B] dark:text-[#94A3B8]">
                     .csv
                   </span>
@@ -991,7 +1650,7 @@ export default function App() {
                   آزمون تستی دوحالته
                 </h2>
                 <p className="mt-1 text-[11px] leading-5 text-[#64748B] dark:text-[#94A3B8]">
-                  ارزیابی در حالت بازخورد آنی یا آزمون زمان‌دار با کارنامه
+                  ارزیابی فصلی و ترکیبی در حالت بازخورد آنی یا آزمون زمان‌دار
                 </p>
               </div>
             </div>
@@ -1001,15 +1660,17 @@ export default function App() {
 
       {workspaceMode === 'notes' && activeLesson && (
         <ArticleWorkspace
+          courses={courses}
           lessons={lessons}
           activeLesson={activeLesson}
           onSelectLesson={(id) => {
             setActiveLessonId(id);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onChangeMode={(mode) => {
             setWorkspaceMode(mode);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (mode !== 'notes') {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
           }}
           fontScale={fontScale}
           bookmarkedSections={bookmarkedSections}
@@ -1023,6 +1684,11 @@ export default function App() {
           lessonMasteryMap={lessonMasteryMap}
           rightSidebarOpen={rightSidebarOpen}
           leftSidebarOpen={leftSidebarOpen}
+          headerCollapsed={headerCollapsed}
+          isFocusMode={isFullFocusMode}
+          studySeconds={studySecondsByLesson[activeLesson.id] ?? 0}
+          savedCheckpoint={studyCheckpointsByLesson[activeLesson.id] ?? null}
+          onReadingStateChange={setLiveReadingSnapshot}
           onToggleRightSidebar={() => setRightSidebarOpen((v) => !v)}
           onToggleLeftSidebar={() => setLeftSidebarOpen((v) => !v)}
           onToggleFocusMode={handleToggleFocusMode}
@@ -1033,6 +1699,15 @@ export default function App() {
           onUpdateHighlightColor={handleUpdateHighlightColor}
           onClearLessonHighlights={handleClearLessonHighlights}
           onOpenImportModal={() => setImportModalOpen(true)}
+          onReorderCourses={handleReorderCourses}
+          onReorderLessons={handleReorderLessons}
+          onUpdateSection={handleUpdateSection}
+          onAddSection={handleAddSection}
+          onDeleteSection={handleDeleteSection}
+          lessonComments={activeLessonComments}
+          onAddPassageComment={handleAddPassageComment}
+          onUpdatePassageComment={handleUpdatePassageComment}
+          onDeletePassageComment={handleDeletePassageComment}
         />
       )}
 
@@ -1040,7 +1715,9 @@ export default function App() {
         <MindmapWorkspace
           lesson={activeLesson}
           onJumpToSection={handleJumpToSection}
-          onCreateFlashcardFromNode={handleCreateFlashcardFromNode}
+          onUpdateMindmap={handleUpdateMindmap}
+          focusNodeId={focusMindmapNodeId}
+          onClearFocusNode={handleClearFocusMindmapNode}
           onOpenImportModal={() => setImportModalOpen(true)}
           onOpenResources={() => setWorkspaceMode('resources')}
         />
@@ -1054,7 +1731,11 @@ export default function App() {
           onUpdateStatus={handleUpdateCardStatus}
           onResetLessonStatuses={handleResetLessonCardStatuses}
           onAddCustomCard={handleAddCustomCard}
+          onUpdateCard={handleUpdateFlashcard}
+          onDeleteCard={handleDeleteFlashcard}
           onJumpToSection={handleJumpToSection}
+          focusCardId={focusFlashcardId}
+          onClearFocusCard={handleClearFocusFlashcard}
           onOpenImportModal={() => setImportModalOpen(true)}
           onOpenResources={() => setWorkspaceMode('resources')}
         />
@@ -1063,8 +1744,14 @@ export default function App() {
       {workspaceMode === 'quiz' && activeLesson && (
         <QuizWorkspace
           lesson={activeLesson}
+          lessons={lessons}
           onJumpToSection={handleJumpToSection}
+          onJumpToLessonSection={handleJumpToLessonSection}
           onSaveQuizBestScore={handleSaveQuizBestScore}
+          onUpdateQuizQuestion={handleUpdateQuizQuestion}
+          onDeleteQuizQuestion={handleDeleteQuizQuestion}
+          focusQuestionId={focusQuizQuestionId}
+          onClearFocusQuestion={handleClearFocusQuizQuestion}
           onOpenImportModal={() => setImportModalOpen(true)}
           onOpenResources={() => setWorkspaceMode('resources')}
         />
@@ -1072,6 +1759,7 @@ export default function App() {
 
       {workspaceMode === 'resources' && (
         <ResourceManagerWorkspace
+          courses={courses}
           lessons={lessons}
           activeLessonId={activeLesson?.id ?? null}
           customCardsByLesson={customCardsByLesson}
@@ -1079,12 +1767,19 @@ export default function App() {
           onOpenLessonInMode={(id, mode) => {
             setActiveLessonId(id);
             setWorkspaceMode(mode);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (mode !== 'notes') {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
           }}
           onOpenBatchImport={() => setImportModalOpen(true)}
+          onCreateCourse={handleCreateCourse}
+          onRenameCourse={handleRenameCourse}
+          onDeleteCourse={handleDeleteCourse}
+          onReorderCourses={handleReorderCourses}
           onCreateLesson={handleCreateLesson}
           onRenameLesson={handleRenameLesson}
           onDeleteLesson={handleDeleteLesson}
+          onReorderLessons={handleReorderLessons}
           onReplaceResource={handleReplaceResource}
           onRenameResource={handleRenameResource}
           onRenameSection={handleRenameSection}
@@ -1097,6 +1792,7 @@ export default function App() {
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
         lessons={lessons}
+        customCardsByLesson={customCardsByLesson}
         onNavigate={handleSearchNavigate}
       />
 
@@ -1119,6 +1815,7 @@ export default function App() {
       <ImportModal
         open={importModalOpen}
         onClose={() => setImportModalOpen(false)}
+        courses={courses}
         activeLesson={activeLesson}
         nextChapterNumber={lessons.length + 1}
         onApplyImport={handleApplyImport}

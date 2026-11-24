@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   CheckSquare,
   FileUp,
-  Layers,
   Network,
   Plus,
   RefreshCw,
@@ -13,7 +12,8 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { Lesson } from '../types/study';
+import { Course, Flashcard, Lesson } from '../types/study';
+import { FlashcardIcon } from './icons/FlashcardIcon';
 import {
   detectJsonKind,
   ParsedMarkdownLesson,
@@ -24,12 +24,13 @@ import {
   parseMindmapJson,
   parseQuizJson,
 } from '../utils/importers';
-import { Flashcard } from '../types/study';
 
 export interface LessonImportPayload {
   mode: 'update' | 'create';
   title: string;
   course: string;
+  courseId?: string;
+  createNewCourse?: boolean;
   code: string;
   markdown?: ParsedMarkdownLesson;
   flashcards?: Flashcard[];
@@ -40,6 +41,7 @@ export interface LessonImportPayload {
 interface ImportModalProps {
   open: boolean;
   onClose: () => void;
+  courses?: Course[];
   activeLesson: Lesson | null;
   nextChapterNumber: number;
   onApplyImport: (payload: LessonImportPayload) => void;
@@ -65,6 +67,7 @@ const EMPTY_SLOT = <T,>(): SlotState<T> => ({
 export const ImportModal: React.FC<ImportModalProps> = ({
   open,
   onClose,
+  courses = [],
   activeLesson,
   nextChapterNumber,
   onApplyImport,
@@ -74,6 +77,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     activeLesson ? 'update' : 'create'
   );
   const [title, setTitle] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [course, setCourse] = useState('');
   const [code, setCode] = useState('');
   const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
@@ -94,6 +98,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     if (!open) return;
     setImportMode(activeLesson ? 'update' : 'create');
     setTitle('');
+    setSelectedCourseId(activeLesson?.courseId ?? courses[0]?.id ?? '__new__');
     setCourse('');
     setCode('');
     setGlobalError(null);
@@ -101,6 +106,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     setCsvSlot(EMPTY_SLOT());
     setQuizSlot(EMPTY_SLOT());
     setMmSlot(EMPTY_SLOT());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, activeLesson?.id]);
 
   useEffect(() => {
@@ -135,7 +141,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         else if (kind === 'mindmap') targetSlot = 'mindmap';
         else {
           setGlobalError(
-            `نوع فایل JSON «${file.name}» به صورت خودکار تشخیص داده نشد. لطفاً آن را مستقیماً در کادر آزمون یا درخت دانش بارگذاری کنید.`
+            `نوع فایل JSON «${file.name}» به صورت خودکار تشخیص داده نشد. لطفاً آن را مستقیماً در کادر آزمون یا مایندمپ بارگذاری کنید.`
           );
           return;
         }
@@ -218,7 +224,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           fileName: file.name,
           data: parsed,
           error: null,
-          summary: `${parsed.nodeCount} گره مفهومی در درخت دانش`,
+          summary: `${parsed.nodeCount} گره مفهومی در مایندمپ`,
         });
         if (!title && parsed.title) setTitle(parsed.title);
         if (!course && parsed.course) setCourse(parsed.course);
@@ -226,7 +232,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         setMmSlot({
           fileName: file.name,
           data: null,
-          error: err instanceof Error ? err.message : 'خطا در خواندن JSON درخت دانش',
+          error: err instanceof Error ? err.message : 'خطا در خواندن JSON مایندمپ',
           summary: '',
         });
       }
@@ -239,6 +245,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       await processFileForSlot(file, forcedSlot);
     }
   };
+
+  const isCreatingNewCourse =
+    courses.length === 0 || selectedCourseId === '__new__' || !selectedCourseId;
 
   const hasAnyValidImport = Boolean(mdSlot.data || csvSlot.data || quizSlot.data || mmSlot.data);
   const canSubmit =
@@ -255,21 +264,29 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       mdSlot.data?.title ||
       mmSlot.data?.title ||
       quizSlot.data?.title ||
-      (effectiveMode === 'create' ? `فصل ${nextChapterNumber}: درس جدید` : activeLesson!.title);
+      (effectiveMode === 'create' ? `جلسه ${nextChapterNumber}` : activeLesson!.title);
+
+    const pickedCourse =
+      !isCreatingNewCourse && selectedCourseId
+        ? courses.find((c) => c.id === selectedCourseId)
+        : undefined;
 
     const resolvedCourse =
+      pickedCourse?.name ||
       course.trim() ||
       mmSlot.data?.course ||
-      (effectiveMode === 'create' ? 'درس‌های شخصی جادرسی' : activeLesson!.course);
+      (effectiveMode === 'create' ? 'درس جدید' : activeLesson!.course);
 
     const resolvedCode =
       code.trim() ||
-      (effectiveMode === 'create' ? `JDR-${100 + nextChapterNumber}` : activeLesson!.code);
+      (effectiveMode === 'create' ? `S-${100 + nextChapterNumber}` : activeLesson!.code);
 
     onApplyImport({
       mode: effectiveMode,
       title: resolvedTitle,
       course: resolvedCourse,
+      courseId: pickedCourse?.id,
+      createNewCourse: effectiveMode === 'create' ? !pickedCourse : false,
       code: resolvedCode,
       markdown: mdSlot.data ?? undefined,
       flashcards: csvSlot.data ?? undefined,
@@ -304,7 +321,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       label: 'فلش‌کارت (.csv)',
       accept: '.csv',
       formatHint: 'فایل دو ستونی بدون هدر (question,answer) با پشتیبانی ویرگول داخل گیومه و LaTeX',
-      icon: Layers,
+      icon: FlashcardIcon,
       state: csvSlot,
       inputRef: csvInputRef,
       clear: () => setCsvSlot(EMPTY_SLOT()),
@@ -321,7 +338,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     },
     {
       key: 'mindmap',
-      label: 'درخت دانش / مایندمپ (.json)',
+      label: 'مایندمپ (.json)',
       accept: '.json',
       formatHint: 'ساختار { metadata, knowledge_tree, splitting_tree_models } با زیرشاخه، مثال، قانون و جدول',
       icon: Network,
@@ -355,7 +372,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 ورود فایل‌ها و مدیریت درس
               </h2>
               <p className="text-xs text-[#64748B] dark:text-[#94A3B8]">
-                بارگذاری جزوه، فلش‌کارت، آزمون و درخت دانش در فرمت‌های استاندارد
+                بارگذاری جزوه، فلش‌کارت، آزمون و مایندمپ در فرمت‌های استاندارد
               </p>
             </div>
           </div>
@@ -385,7 +402,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 }`}
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                <span>به‌روزرسانی درس فعال</span>
+                <span>به‌روزرسانی جلسه فعال</span>
               </button>
               <button
                 type="button"
@@ -397,18 +414,20 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 }`}
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>+ ایجاد درس جدید</span>
+                <span>+ ایجاد جلسه جدید</span>
               </button>
             </div>
 
-            {/* Active Lesson Context OR New Lesson Metadata Fields */}
+            {/* Active Session Context OR New Session + Course Metadata Fields */}
             {effectiveMode === 'update' && activeLesson ? (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-xs dark:border-[#27323E] dark:bg-[#1C252E]">
                 <div>
-                  <span className="text-[#64748B] dark:text-[#94A3B8]">درس فعال برای به‌روزرسانی:</span>
+                  <span className="text-[#64748B] dark:text-[#94A3B8]">
+                    درس «{activeLesson.course}» · جلسه فعال برای به‌روزرسانی محتوا:
+                  </span>
                   <div className="mt-0.5 flex items-center gap-2">
                     <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
-                      فصل {activeLesson.chapterNumber}: {activeLesson.title}
+                      جلسه {activeLesson.chapterNumber}: {activeLesson.title}
                     </span>
                     <span className="ltr-inline font-mono text-[11px] text-[#0F766E] dark:text-[#2DD4BF]">
                       {activeLesson.code}
@@ -425,47 +444,73 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     className="flex items-center gap-1.5 rounded-lg border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-1.5 text-xs font-medium text-[#DC2626] transition-colors hover:bg-[#FEE2E2] dark:border-[#B91C1C]/60 dark:bg-[#7F1D1D]/30 dark:text-[#F87171]"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    <span>حذف این درس</span>
+                    <span>حذف این جلسه</span>
                   </button>
                 )}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4 dark:border-[#27323E] dark:bg-[#1C252E] sm:grid-cols-3">
+                <div className="sm:col-span-3 space-y-2">
+                  <label className="block text-xs font-medium text-[#334155] dark:text-[#CBD5E1]">
+                    ۱. درس (سطح اول) — انتخاب درس موجود یا ساخت درس مستقل جدید
+                  </label>
+                  {courses.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <select
+                        value={selectedCourseId || '__new__'}
+                        onChange={(e) => setSelectedCourseId(e.target.value)}
+                        className="archival-input w-full border border-[#CBD5E1] bg-white text-xs text-[#0F172A] dark:border-[#364554] dark:bg-[#161D24] dark:text-[#F1F5F9]"
+                      >
+                        {courses.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            درس: {c.name}
+                          </option>
+                        ))}
+                        <option value="__new__">+ ساخت درس مستقل جدید...</option>
+                      </select>
+                      {isCreatingNewCourse && (
+                        <input
+                          type="text"
+                          value={course}
+                          onChange={(e) => setCourse(e.target.value)}
+                          placeholder="نام درس جدید (مثلاً: بیوشیمی)"
+                          className="archival-input w-full border border-[#CBD5E1] bg-white text-xs text-[#0F172A] dark:border-[#364554] dark:bg-[#161D24] dark:text-[#F1F5F9]"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={course}
+                      onChange={(e) => setCourse(e.target.value)}
+                      placeholder="نام درس جدید (مثلاً: یادگیری ماشین کاربردی)"
+                      className="archival-input w-full border border-[#CBD5E1] bg-white text-xs text-[#0F172A] dark:border-[#364554] dark:bg-[#161D24] dark:text-[#F1F5F9]"
+                    />
+                  )}
+                </div>
                 <div className="sm:col-span-2">
                   <label className="mb-1 block text-xs font-medium text-[#334155] dark:text-[#CBD5E1]">
-                    عنوان فصل / درس جدید
+                    ۲. عنوان جلسه جدید (سطح دوم)
                   </label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="مثلاً: درخت‌های تصمیم و جنگل تصادفی (یا تکمیل خودکار از فایل)"
+                    placeholder="مثلاً: جلسه اول - درخت‌های تصمیم (یا تکمیل خودکار از فایل)"
                     className="archival-input w-full border border-[#CBD5E1] bg-white text-xs text-[#0F172A] dark:border-[#364554] dark:bg-[#161D24] dark:text-[#F1F5F9]"
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-[#334155] dark:text-[#CBD5E1]">
-                    کد درس (اختیاری)
+                    کد جلسه (اختیاری)
                   </label>
                   <input
                     type="text"
                     dir="ltr"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
-                    placeholder={`IMP-${100 + nextChapterNumber}`}
+                    placeholder={`S-${100 + nextChapterNumber}`}
                     className="archival-input w-full border border-[#CBD5E1] bg-white font-mono text-xs text-[#0F172A] dark:border-[#364554] dark:bg-[#161D24] dark:text-[#F1F5F9]"
-                  />
-                </div>
-                <div className="sm:col-span-3">
-                  <label className="mb-1 block text-xs font-medium text-[#334155] dark:text-[#CBD5E1]">
-                    نام درس یا گروه علمی (اختیاری)
-                  </label>
-                  <input
-                    type="text"
-                    value={course}
-                    onChange={(e) => setCourse(e.target.value)}
-                    placeholder="مثلاً: یادگیری ماشین کاربردی"
-                    className="archival-input w-full border border-[#CBD5E1] bg-white text-xs text-[#0F172A] dark:border-[#364554] dark:bg-[#161D24] dark:text-[#F1F5F9]"
                   />
                 </div>
               </div>
@@ -505,7 +550,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               <p className="mt-1 text-xs text-[#64748B] dark:text-[#94A3B8]">
                 تشخیص خودکار <span className="ltr-inline font-mono">.md</span> ·{' '}
                 <span className="ltr-inline font-mono">.csv</span> ·{' '}
-                <span className="ltr-inline font-mono">.json</span> (آزمون و درخت دانش)
+                <span className="ltr-inline font-mono">.json</span> (آزمون و مایندمپ)
               </p>
               <input
                 ref={multiInputRef}
@@ -622,8 +667,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           <div className="flex items-center justify-between gap-3 border-t border-[#E2E8F0] bg-white px-6 py-4 dark:border-[#27323E] dark:bg-[#1C252E]">
             <span className="text-xs text-[#64748B] dark:text-[#94A3B8]">
               {effectiveMode === 'update'
-                ? 'فقط بخش‌هایی که فایل جدید برایشان انتخاب شده به‌روزرسانی می‌شوند.'
-                : 'می‌توانید بلافاصله فایل‌های درس را اضافه کنید یا بعداً در مدیریت منابع بارگذاری نمایید.'}
+                ? 'فقط بخش‌هایی که فایل جدید برایشان انتخاب شده در جلسه فعال جایگزین می‌شوند.'
+                : 'می‌توانید فایل‌های جلسه را همین‌جا اضافه کنید یا بعداً در مدیریت منابع بارگذاری نمایید.'}
             </span>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -638,7 +683,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 disabled={!canSubmit}
                 className="rounded-lg bg-[#0D9488] px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E] disabled:cursor-not-allowed disabled:opacity-45"
               >
-                {effectiveMode === 'update' ? 'ذخیره در درس فعال' : 'ایجاد درس جدید'}
+                {effectiveMode === 'update' ? 'ذخیره در جلسه فعال' : 'ثبت جلسه جدید'}
               </button>
             </div>
           </div>
